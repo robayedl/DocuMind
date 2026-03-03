@@ -1,87 +1,53 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from dataclasses import dataclass
+from typing import List
 
-from rag.store import get_collection
+from rag.embed import embed_texts
+from rag.store import DEFAULT_COLLECTION, get_collection
+from rag.text_clean import normalize_one_line
 
 
-def retrieve_top_k(doc_id: str, query_embedding: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
-    """
-    Retrieve top-k chunks for a given doc_id using a query embedding.
-    Returns list of: {"text": ..., "metadata": {...}, "distance": ...}
-    """
-    col = get_collection()
+@dataclass(frozen=True)
+class RetrievedChunk:
+    ref: str
+    page: int
+    chunk_id: int
+    source: str
+    text: str          # original (keeps \n)
+    distance: float
 
-    res = col.query(
-        query_embeddings=[query_embedding],
+
+def retrieve_top_k(doc_id: str, question: str, top_k: int = 5, collection_name: str = DEFAULT_COLLECTION) -> List[RetrievedChunk]:
+    collection = get_collection(collection_name)
+
+    q_emb = embed_texts([question])[0]
+
+    res = collection.query(
+        query_embeddings=[q_emb],
         n_results=top_k,
         where={"doc_id": doc_id},
         include=["documents", "metadatas", "distances"],
     )
 
-    docs = (res.get("documents") or [[]])[0]
-    metas = (res.get("metadatas") or [[]])[0]
-    dists = (res.get("distances") or [[]])[0]
+    docs = res.get("documents", [[]])[0] or []
+    metas = res.get("metadatas", [[]])[0] or []
+    dists = res.get("distances", [[]])[0] or []
 
-    out: List[Dict[str, Any]] = []
+    hits: List[RetrievedChunk] = []
     for i in range(min(len(docs), len(metas), len(dists))):
-        out.append({"text": docs[i], "metadata": metas[i], "distance": dists[i]})
-    return out
+        md = metas[i] or {}
+        raw_text = docs[i] or ""
 
-
-def build_cited_answer(question: str, retrieved: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
-    """
-    Deterministic answer builder (non-LLM).
-    - Answer: returns a clean extractive answer (optionally formatted)
-    - Citations: list of {ref, page, chunk_id, source}
-    """
-    if not retrieved:
-        return "I could not find relevant information in the document.", []
-
-    top = retrieved[0]
-    text = (top.get("text") or "").strip()
-
-    q = question.lower()
-
-    # If user asks about "skills", try to present a neat bullet list
-    if "skill" in q:
-        # Heuristic: split by common separators; resumes often have commas or bullets
-        candidates: List[str] = []
-        if "•" in text:
-            candidates = [p.strip(" •-\t") for p in text.split("•") if p.strip()]
-        else:
-            # fallback: try commas
-            parts = [p.strip() for p in text.split(",") if p.strip()]
-            # only use comma split if it looks reasonable
-            if 4 <= len(parts) <= 25:
-                candidates = parts
-
-        if len(candidates) >= 3:
-            bullets = candidates[:10]
-            answer = "Main skills (from the document):\n- " + "\n- ".join(bullets)
-        else:
-            answer = text
-    else:
-        answer = text
-
-    # Trim very long answers
-    if len(answer) > 900:
-        answer = answer[:900].rstrip() + "..."
-
-    citations: List[Dict[str, Any]] = []
-    for r in retrieved:
-        m = r.get("metadata") or {}
-        doc_id = m.get("doc_id")
-        page = m.get("page")
-        chunk_id = m.get("chunk_id")
-
-        citations.append(
-            {
-                "ref": f"{doc_id}_p{page}_c{chunk_id}",
-                "page": page,
-                "chunk_id": chunk_id,
-                "source": m.get("source"),
-            }
+        hits.append(
+            RetrievedChunk(
+                ref=str(md.get("ref", f"{doc_id}_unknown_{i}")),
+                page=int(md.get("page", -1)),
+                chunk_id=int(md.get("chunk_id", i)),
+                source=str(md.get("source", f"{doc_id}.pdf")),
+                text=raw_text,  # keep original lines
+                distance=float(dists[i]),
+            )
         )
 
-    return answer, citations
+    return hits

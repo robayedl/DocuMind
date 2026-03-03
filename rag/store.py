@@ -5,7 +5,6 @@ from pathlib import Path
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 DEFAULT_COLLECTION = "pdf_chunks"
 
