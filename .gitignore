@@ -23,4 +23,5 @@ storage/
 chroma_db/
 data/
 eval/results.json
+eval/report.json
 eval/report.md
