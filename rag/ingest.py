@@ -1,36 +1,52 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from typing import List
+
 from pypdf import PdfReader
 
 
-@dataclass(frozen=True)
+@dataclass
 class Chunk:
     text: str
     page: int
     chunk_id: int
 
 
-def extract_pages(pdf_path: str) -> list[str]:
+def normalize_text(s: str) -> str:
+    """
+    Clean PDF-extracted text to avoid broken spacing/newlines.
+    """
+    s = s.replace("\u00a0", " ")
+    s = re.sub(r"\s+", " ", s)
+    return s.strip()
+
+
+def extract_pages(pdf_path: str) -> List[str]:
+    """
+    Extract text from each page of a PDF as a list[str].
+    """
     reader = PdfReader(pdf_path)
-    pages: list[str] = []
-    for p in reader.pages:
-        pages.append(p.extract_text() or "")
+    pages: List[str] = []
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        pages.append(normalize_text(text))
     return pages
 
 
 def chunk_text(
-    pages: list[str],
+    pages: List[str],
     chunk_size: int = 1200,
     chunk_overlap: int = 200,
-) -> list[Chunk]:
+) -> List[Chunk]:
     """
     Safe character-based chunking that always makes progress.
     """
     if chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be smaller than chunk_size")
 
-    chunks: list[Chunk] = []
+    chunks: List[Chunk] = []
     step = chunk_size - chunk_overlap
 
     for page_idx, page_text in enumerate(pages, start=1):
