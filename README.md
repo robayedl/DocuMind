@@ -83,7 +83,7 @@ rag-pdf-assistant
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/rag-pdf-assistant.git
+git clone https://github.com/robayedl/rag-pdf-assistant.git
 cd rag-pdf-assistant
 ```
 
