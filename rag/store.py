@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import List
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+
+from rag.llm import get_embeddings
 
 DEFAULT_COLLECTION = "pdf_chunks"
 
@@ -13,15 +16,23 @@ def get_chroma_dir() -> str:
     return os.getenv("CHROMA_DIR", "chroma_db")
 
 
-def get_client() -> chromadb.ClientAPI:
+def get_vectorstore(doc_id: str | None = None) -> Chroma:
     chroma_dir = get_chroma_dir()
     Path(chroma_dir).mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(
-        path=chroma_dir,
-        settings=ChromaSettings(anonymized_telemetry=False),
+    return Chroma(
+        collection_name=DEFAULT_COLLECTION,
+        embedding_function=get_embeddings(),
+        persist_directory=chroma_dir,
+        collection_metadata={"hnsw:space": "cosine"},
     )
 
 
-def get_collection(name: str = DEFAULT_COLLECTION):
-    client = get_client()
-    return client.get_or_create_collection(name=name, metadata={"hnsw:space": "cosine"})
+def add_documents(doc_id: str, documents: List[Document]) -> None:
+    vs = get_vectorstore()
+    ids = [doc.metadata["ref"] for doc in documents]
+    vs.add_documents(documents, ids=ids)
+
+
+def similarity_search(doc_id: str, query: str, k: int = 5) -> List[Document]:
+    vs = get_vectorstore()
+    return vs.similarity_search(query, k=k, filter={"doc_id": doc_id})
