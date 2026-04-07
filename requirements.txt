@@ -29,5 +29,6 @@ langchain
 langchain-google-genai
 langchain-huggingface
 langchain-chroma
+langchain-text-splitters
 rank-bm25
 google-generativeai

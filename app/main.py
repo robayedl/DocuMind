@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List
 
@@ -11,22 +12,29 @@ load_dotenv()
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from langchain_core.documents import Document
+
 from rag.answer import make_answer
 from rag.ingest import index_document
 from rag.llm import get_embeddings, get_llm
-from rag.retrieve import retrieve_top_k, RetrievedChunk
+from rag.retrieve import retrieve_top_k
 from app.storage import new_doc_id, pdf_path
 
 APP_ENV = os.getenv("APP_ENV", "local")
 
-app = FastAPI(title="rag-pdf-assistant")
 
-
-@app.on_event("startup")
-def _warm_up():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Pre-load the embedding model and LLM client at startup to avoid cold-start latency."""
     get_embeddings()
-    get_llm()
+    try:
+        get_llm()
+    except RuntimeError:
+        pass  # GOOGLE_API_KEY not set; LLM will fail at query time
+    yield
+
+
+app = FastAPI(title="rag-pdf-assistant", lifespan=lifespan)
 
 
 # ==============================
@@ -124,7 +132,7 @@ def query(req: QueryRequest) -> QueryResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
 
-    hits: List[RetrievedChunk] = retrieve_top_k(
+    hits: List[Document] = retrieve_top_k(
         doc_id=req.doc_id,
         question=req.question,
         top_k=req.top_k,
@@ -141,12 +149,12 @@ def query(req: QueryRequest) -> QueryResponse:
 
     citations = [
         Citation(
-            ref=h.ref,
-            page=h.page,
-            chunk_id=h.chunk_id,
-            source=h.source,
+            ref=doc.metadata.get("ref", ""),
+            page=doc.metadata.get("page", -1),
+            chunk_id=doc.metadata.get("chunk_id", -1),
+            source=doc.metadata.get("source", ""),
         )
-        for h in hits
+        for doc in hits
     ]
 
     latency_ms = (time.perf_counter() - t0) * 1000.0
