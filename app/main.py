@@ -5,16 +5,28 @@ import time
 from pathlib import Path
 from typing import List
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from rag.answer import make_answer
 from rag.ingest import index_document
+from rag.llm import get_embeddings, get_llm
 from rag.retrieve import retrieve_top_k, RetrievedChunk
 from app.storage import new_doc_id, pdf_path
 
 APP_ENV = os.getenv("APP_ENV", "local")
 
 app = FastAPI(title="rag-pdf-assistant")
+
+
+@app.on_event("startup")
+def _warm_up():
+    """Pre-load the embedding model and LLM client at startup to avoid cold-start latency."""
+    get_embeddings()
+    get_llm()
 
 
 # ==============================
@@ -122,19 +134,10 @@ def query(req: QueryRequest) -> QueryResponse:
     if not hits:
         raise HTTPException(status_code=404, detail="Document not indexed.")
 
-    # Build clean answer (collapse excessive whitespace)
-    answer_parts: List[str] = []
-    for h in hits:
-        txt = (h.text or "").strip()
-        if not txt:
-            continue
-        txt = " ".join(txt.split())
-        answer_parts.append(txt)
+    answer = make_answer(req.question, hits)
 
-    if not answer_parts:
+    if not answer:
         raise HTTPException(status_code=404, detail="No relevant content found.")
-
-    answer = "\n".join(answer_parts)
 
     citations = [
         Citation(

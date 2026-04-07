@@ -23,3 +23,11 @@ onnxruntime
 
 fastembed>=0.3.3
 onnxruntime>=1.17.0
+
+# LLM Integration - Stage 1
+langchain
+langchain-google-genai
+langchain-huggingface
+langchain-chroma
+rank-bm25
+google-generativeai
