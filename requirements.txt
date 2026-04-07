@@ -32,3 +32,6 @@ langchain-chroma
 langchain-text-splitters
 rank-bm25
 google-generativeai
+
+# Stage 3: Agentic RAG
+langgraph
