@@ -7,9 +7,10 @@ from langchain_core.documents import Document
 
 
 class GraphState(TypedDict):
-    question: str        # the user's question
-    generation: str      # the LLM's generated answer
-    documents: List[Document]  # retrieved documents
-    doc_id: str          # which PDF to query
-    retry_count: int     # prevents infinite loops (max 3)
-    route: str           # "retrieve" or "direct"
+    question: str              # the user's question (may be rewritten)
+    generation: str            # the LLM's generated answer
+    documents: List[Document]  # retrieved (and graded) documents
+    doc_id: str                # which PDF to query
+    retry_count: int           # prevents infinite loops (max 3)
+    route: str                 # "retrieve" or "direct"
+    grounded: bool             # whether the generation is supported by documents

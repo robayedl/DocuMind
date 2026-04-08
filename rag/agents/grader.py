@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import List, Literal
+import json
+from typing import List
 
 from langchain_core.documents import Document
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
 
 from rag.agents.state import GraphState
 from rag.llm import get_llm
@@ -13,41 +14,45 @@ _GRADER_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are a relevance grader. Given a user question and a document chunk, "
-            "decide if the document contains information useful for answering the question.\n"
-            "Answer 'yes' if the document is relevant, 'no' if it is not.",
+            "You are a relevance grader. Given a user question and a numbered list of document chunks, "
+            "return a JSON array of 'yes' or 'no' for each chunk indicating whether it is relevant "
+            "to answering the question.\n"
+            "Example output for 3 chunks: [\"yes\", \"no\", \"yes\"]\n"
+            "Return only the JSON array, nothing else.",
         ),
         (
             "human",
-            "Question: {question}\n\nDocument:\n{document}",
+            "Question: {question}\n\nDocuments:\n{documents}",
         ),
     ]
 )
 
 
-class RelevanceScore(BaseModel):
-    """Structured output for document relevance grading."""
-    score: Literal["yes", "no"] = Field(
-        description="'yes' if the document is relevant to the question, 'no' otherwise."
+def grade_documents(state: GraphState) -> GraphState:
+    """Filter retrieved documents to only those relevant to the question (single LLM call)."""
+    llm = get_llm()
+    chain = _GRADER_PROMPT | llm | StrOutputParser()
+
+    documents: List[Document] = state.get("documents", [])
+    if not documents:
+        return {"documents": []}
+
+    numbered = "\n\n".join(
+        f"[{i+1}] {doc.page_content}" for i, doc in enumerate(documents)
     )
 
+    raw = chain.invoke({"question": state["question"], "documents": numbered})
 
-def grade_documents(state: GraphState) -> GraphState:
-    """Filter retrieved documents to only those relevant to the question."""
-    llm = get_llm()
-    structured_llm = llm.with_structured_output(RelevanceScore)
-    chain = _GRADER_PROMPT | structured_llm
+    # Parse the JSON array response
+    try:
+        scores: List[str] = json.loads(raw.strip())
+    except (json.JSONDecodeError, ValueError):
+        # If parsing fails, keep all documents
+        scores = ["yes"] * len(documents)
 
-    question = state["question"]
-    documents: List[Document] = state.get("documents", [])
+    relevant_docs = [
+        doc for doc, score in zip(documents, scores)
+        if str(score).strip().lower() == "yes"
+    ]
 
-    relevant_docs: List[Document] = []
-    for doc in documents:
-        result: RelevanceScore = chain.invoke(
-            {"question": question, "document": doc.page_content}
-        )
-        if result.score == "yes":
-            relevant_docs.append(doc)
-
-    # If no documents pass grading, signal a retry by returning empty list
     return {"documents": relevant_docs}
