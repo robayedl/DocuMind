@@ -14,3 +14,5 @@ class GraphState(TypedDict):
     retry_count: int           # prevents infinite loops (max 3)
     route: str                 # "retrieve" or "direct"
     grounded: bool             # whether the generation is supported by documents
+    error: str                 # set when a node fails or doc is not indexed
+    session_id: str            # for conversation memory (empty string = no memory)

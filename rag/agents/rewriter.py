@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from rag.agents.state import GraphState
 from rag.llm import get_llm
+
+logger = logging.getLogger(__name__)
 
 _REWRITER_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -21,11 +25,14 @@ _REWRITER_PROMPT = ChatPromptTemplate.from_messages(
 
 def rewrite_query(state: GraphState) -> GraphState:
     """Rewrite the question for better retrieval and increment the retry counter."""
-    llm = get_llm()
-    chain = _REWRITER_PROMPT | llm | StrOutputParser()
-
-    rewritten = chain.invoke({"question": state["question"]})
-    return {
-        "question": rewritten.strip(),
-        "retry_count": state["retry_count"] + 1,
-    }
+    try:
+        llm = get_llm()
+        chain = _REWRITER_PROMPT | llm | StrOutputParser()
+        rewritten = chain.invoke({"question": state["question"]})
+        return {
+            "question": rewritten.strip(),
+            "retry_count": state["retry_count"] + 1,
+        }
+    except Exception as e:
+        logger.error(f"Query rewriter failed, keeping original question: {e}")
+        return {"retry_count": state["retry_count"] + 1}

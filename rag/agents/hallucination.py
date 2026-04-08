@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -7,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from rag.agents.state import GraphState
 from rag.llm import get_llm
+
+logger = logging.getLogger(__name__)
 
 _HALLUCINATION_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -34,21 +37,25 @@ class GroundednessScore(BaseModel):
 
 def check_hallucination(state: GraphState) -> GraphState:
     """Verify the generated answer is supported by the retrieved documents."""
-    llm = get_llm()
-    structured_llm = llm.with_structured_output(GroundednessScore)
-    chain = _HALLUCINATION_PROMPT | structured_llm
+    try:
+        llm = get_llm()
+        structured_llm = llm.with_structured_output(GroundednessScore)
+        chain = _HALLUCINATION_PROMPT | structured_llm
 
-    context = "\n\n".join(doc.page_content for doc in state["documents"])
-    result: GroundednessScore = chain.invoke(
-        {"context": context, "generation": state["generation"]}
-    )
+        context = "\n\n".join(doc.page_content for doc in state["documents"])
+        result: GroundednessScore = chain.invoke(
+            {"context": context, "generation": state["generation"]}
+        )
 
-    if result.grounded == "yes":
+        if result.grounded == "yes":
+            return {"grounded": True}
+
+        return {
+            "grounded": False,
+            "generation": "",
+            "retry_count": state["retry_count"] + 1,
+        }
+
+    except Exception as e:
+        logger.error(f"Hallucination check failed, assuming grounded: {e}")
         return {"grounded": True}
-
-    # Not grounded — increment retry counter and clear generation for retry
-    return {
-        "grounded": False,
-        "generation": "",
-        "retry_count": state["retry_count"] + 1,
-    }

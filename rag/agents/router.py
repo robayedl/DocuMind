@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -7,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from rag.agents.state import GraphState
 from rag.llm import get_llm
+
+logger = logging.getLogger(__name__)
 
 _ROUTER_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -31,9 +34,12 @@ class RouteDecision(BaseModel):
 
 def route_query(state: GraphState) -> GraphState:
     """Route the question to retrieval or a direct response."""
-    llm = get_llm()
-    structured_llm = llm.with_structured_output(RouteDecision)
-    chain = _ROUTER_PROMPT | structured_llm
-
-    decision: RouteDecision = chain.invoke({"question": state["question"]})
-    return {"route": decision.route}
+    try:
+        llm = get_llm()
+        structured_llm = llm.with_structured_output(RouteDecision)
+        chain = _ROUTER_PROMPT | structured_llm
+        decision: RouteDecision = chain.invoke({"question": state["question"]})
+        return {"route": decision.route}
+    except Exception as e:
+        logger.error(f"Router failed, defaulting to retrieve: {e}")
+        return {"route": "retrieve"}
