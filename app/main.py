@@ -14,10 +14,9 @@ from pydantic import BaseModel, Field
 
 from langchain_core.documents import Document
 
-from rag.answer import make_answer
+from rag.agents.graph import run_agent
 from rag.ingest import index_document
 from rag.llm import get_embeddings, get_llm
-from rag.retrieve import retrieve_top_k
 from app.storage import new_doc_id, pdf_path
 
 APP_ENV = os.getenv("APP_ENV", "local")
@@ -77,6 +76,7 @@ class QueryResponse(BaseModel):
     answer: str
     citations: List[Citation]
     retrieved: int
+    retries: int
     latency_ms: float
 
 
@@ -132,20 +132,14 @@ def query(req: QueryRequest) -> QueryResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
 
-    hits: List[Document] = retrieve_top_k(
-        doc_id=req.doc_id,
-        question=req.question,
-        top_k=req.top_k,
-    )
+    state = run_agent(question=req.question, doc_id=req.doc_id)
 
-    # If document exists but not indexed → treat as 404 (tests expect this)
-    if not hits:
+    answer = state.get("generation", "")
+    docs: List[Document] = state.get("documents", [])
+
+    # If no answer was generated and no documents were found, doc likely not indexed
+    if not answer and not docs:
         raise HTTPException(status_code=404, detail="Document not indexed.")
-
-    answer = make_answer(req.question, hits)
-
-    if not answer:
-        raise HTTPException(status_code=404, detail="No relevant content found.")
 
     citations = [
         Citation(
@@ -154,7 +148,7 @@ def query(req: QueryRequest) -> QueryResponse:
             chunk_id=doc.metadata.get("chunk_id", -1),
             source=doc.metadata.get("source", ""),
         )
-        for doc in hits
+        for doc in docs
     ]
 
     latency_ms = (time.perf_counter() - t0) * 1000.0
@@ -164,6 +158,7 @@ def query(req: QueryRequest) -> QueryResponse:
         question=req.question,
         answer=answer,
         citations=citations,
-        retrieved=len(hits),
+        retrieved=len(docs),
+        retries=state.get("retry_count", 0),
         latency_ms=round(latency_ms, 2),
     )
