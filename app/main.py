@@ -4,7 +4,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -61,6 +61,7 @@ class QueryRequest(BaseModel):
     doc_id: str = Field(..., min_length=1)
     question: str = Field(..., min_length=2)  # IMPORTANT (test requires 422 for short question)
     top_k: int = Field(5, ge=1, le=20)
+    session_id: Optional[str] = Field(None, description="Optional session ID for conversation memory")
 
 
 class Citation(BaseModel):
@@ -132,7 +133,11 @@ def query(req: QueryRequest) -> QueryResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
 
-    state = run_agent(question=req.question, doc_id=req.doc_id)
+    state = run_agent(
+        question=req.question,
+        doc_id=req.doc_id,
+        session_id=req.session_id or "",
+    )
 
     answer = state.get("generation", "")
     docs: List[Document] = state.get("documents", [])

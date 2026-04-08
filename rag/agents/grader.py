@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import List
 
 from langchain_core.documents import Document
@@ -9,6 +10,8 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from rag.agents.state import GraphState
 from rag.llm import get_llm
+
+logger = logging.getLogger(__name__)
 
 _GRADER_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -30,29 +33,30 @@ _GRADER_PROMPT = ChatPromptTemplate.from_messages(
 
 def grade_documents(state: GraphState) -> GraphState:
     """Filter retrieved documents to only those relevant to the question (single LLM call)."""
-    llm = get_llm()
-    chain = _GRADER_PROMPT | llm | StrOutputParser()
-
     documents: List[Document] = state.get("documents", [])
     if not documents:
         return {"documents": []}
 
-    numbered = "\n\n".join(
-        f"[{i+1}] {doc.page_content}" for i, doc in enumerate(documents)
-    )
-
-    raw = chain.invoke({"question": state["question"], "documents": numbered})
-
-    # Parse the JSON array response
     try:
-        scores: List[str] = json.loads(raw.strip())
-    except (json.JSONDecodeError, ValueError):
-        # If parsing fails, keep all documents
-        scores = ["yes"] * len(documents)
+        llm = get_llm()
+        chain = _GRADER_PROMPT | llm | StrOutputParser()
 
-    relevant_docs = [
-        doc for doc, score in zip(documents, scores)
-        if str(score).strip().lower() == "yes"
-    ]
+        numbered = "\n\n".join(
+            f"[{i+1}] {doc.page_content}" for i, doc in enumerate(documents)
+        )
+        raw = chain.invoke({"question": state["question"], "documents": numbered})
 
-    return {"documents": relevant_docs}
+        try:
+            scores: List[str] = json.loads(raw.strip())
+        except (json.JSONDecodeError, ValueError):
+            scores = ["yes"] * len(documents)
+
+        relevant_docs = [
+            doc for doc, score in zip(documents, scores)
+            if str(score).strip().lower() == "yes"
+        ]
+        return {"documents": relevant_docs}
+
+    except Exception as e:
+        logger.error(f"Grader failed, keeping all documents: {e}")
+        return {"documents": documents}

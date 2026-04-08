@@ -5,7 +5,7 @@ from typing import List
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda
 
 from rag.llm import get_llm
@@ -26,16 +26,21 @@ _SYSTEM_PROMPT = (
 _PROMPT = ChatPromptTemplate.from_messages(
     [
         ("system", _SYSTEM_PROMPT),
+        MessagesPlaceholder("chat_history", optional=True),
         ("human", "{input}"),
     ]
 )
 
 
 def _format_inputs(inputs: dict) -> dict:
-    """Convert Document list to a plain string for the prompt."""
+    """Convert Document list to a plain string and pass through chat history."""
     docs: List[Document] = inputs["context"]
     formatted = "\n\n".join(doc.page_content for doc in docs)
-    return {"context": formatted, "input": inputs["input"]}
+    return {
+        "context": formatted,
+        "input": inputs["input"],
+        "chat_history": inputs.get("chat_history", []),
+    }
 
 
 @lru_cache(maxsize=1)
