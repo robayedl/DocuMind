@@ -1,0 +1,27 @@
+[
+  {
+    "question": "What is this document about?",
+    "ground_truth": "The document describes a resume or CV, which is a summary of an individual's education, work experience, skills, and achievements.",
+    "doc_id": "REPLACE_WITH_YOUR_DOC_ID"
+  },
+  {
+    "question": "What technology and skills are described in this document?",
+    "ground_truth": "the skills section lists various technologies and skills, including programming languages (Python C++), machine learning frameworks (TensorFlow, PyTorch, openCV, TensorFlow) and so on.",
+    "doc_id": "REPLACE_WITH_YOUR_DOC_ID"
+  },
+  {
+    "question": "What are the projects mentioned in the document?",
+    "ground_truth": "The document outlines various projects and professional experiences of the individual. These include smart plant monitoring, object detection and tracking, and so on.",
+    "doc_id": "REPLACE_WITH_YOUR_DOC_ID"
+  },
+  {
+    "question": "What technologies are used?",
+    "ground_truth": "The document mentions like machine learning, deep learning, computer vision, CNN, Mediapipe and so on.",
+    "doc_id": "REPLACE_WITH_YOUR_DOC_ID"
+  },
+  {
+    "question": "What is the annual revenue of Apple Inc. in 2099?",
+    "ground_truth": "I could not find any relevant information in the document.",
+    "doc_id": "REPLACE_WITH_YOUR_DOC_ID"
+  }
+]

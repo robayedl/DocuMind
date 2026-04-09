@@ -7,10 +7,15 @@ API_BASE = "http://localhost:8000"
 
 
 def render_sidebar() -> None:
-    st.sidebar.title("RAG PDF Assistant")
+    st.sidebar.markdown("## 📂 Documents")
 
     # ── Upload ────────────────────────────────────────────────────────────────
-    uploaded_file = st.sidebar.file_uploader("Upload a PDF", type=["pdf"])
+    uploaded_file = st.sidebar.file_uploader(
+        "Upload a PDF to get started",
+        type=["pdf"],
+        label_visibility="collapsed",
+        help="Only PDF files are supported.",
+    )
 
     if uploaded_file is not None:
         already_uploaded = any(
@@ -23,7 +28,6 @@ def render_sidebar() -> None:
     # ── Document list ─────────────────────────────────────────────────────────
     if st.session_state.documents:
         st.sidebar.divider()
-        st.sidebar.subheader("Your Documents")
 
         doc_names = [d["filename"] for d in st.session_state.documents]
         current_name = next(
@@ -32,8 +36,9 @@ def render_sidebar() -> None:
             doc_names[0],
         ) if st.session_state.current_doc_id else doc_names[0]
 
+        st.sidebar.markdown("**Active document**")
         selected_name = st.sidebar.radio(
-            "Select document to query",
+            "Select document",
             doc_names,
             index=doc_names.index(current_name),
             label_visibility="collapsed",
@@ -46,24 +51,26 @@ def render_sidebar() -> None:
             st.rerun()
 
         st.sidebar.caption(
-            f"**File:** {selected_doc['filename']}  \n"
-            f"**Chunks indexed:** {selected_doc['chunks_indexed']}"
+            f"🗂 {selected_doc['chunks_indexed']} chunks indexed"
         )
 
-        # ── Clear chat ────────────────────────────────────────────────────────
         st.sidebar.divider()
-        if st.sidebar.button("Clear Chat", use_container_width=True):
+        if st.sidebar.button("🗑 Clear Chat", use_container_width=True):
             st.session_state.chat_history = []
             st.rerun()
 
     # ── About ─────────────────────────────────────────────────────────────────
     st.sidebar.divider()
-    st.sidebar.caption(
-        "**About this app**  \n"
-        "Upload any PDF and ask questions about it in plain English. "
-        "The assistant reads only your document — it won't guess or make things up.  \n\n"
-        "*Powered by Gemini 2.5 Flash · LangGraph · Hybrid Search*  \n\n"
+    st.sidebar.markdown(
+        "<div style='font-size:0.78rem; color:#8892a4; line-height:1.7'>"
+        "Upload any PDF and ask questions in plain English.<br>"
+        "Answers are grounded in your document only — no guessing.<br><br>"
+        "<b>Powered by</b><br>"
+        "Gemini 2.5 Flash &nbsp;·&nbsp; LangGraph<br>"
+        "Hybrid Search &nbsp;·&nbsp; Cross-Encoder Reranking<br><br>"
         "© 2026 RAG PDF Assistant"
+        "</div>",
+        unsafe_allow_html=True,
     )
 
 
@@ -86,7 +93,7 @@ def _upload_and_index(uploaded_file) -> None:
         st.sidebar.error(f"Upload failed: {e}")
         return
 
-    progress.progress(40, text="Indexing…")
+    progress.progress(40, text="Indexing chunks…")
     try:
         index_resp = requests.post(
             f"{API_BASE}/documents/{doc_id}/index",
@@ -99,7 +106,7 @@ def _upload_and_index(uploaded_file) -> None:
         st.sidebar.error(f"Indexing failed: {e}")
         return
 
-    progress.progress(100, text="Done!")
+    progress.progress(100, text="Ready!")
     progress.empty()
 
     st.session_state.documents.append({
@@ -109,5 +116,5 @@ def _upload_and_index(uploaded_file) -> None:
     })
     st.session_state.current_doc_id = doc_id
     st.session_state.chat_history = []
-    st.sidebar.success(f"Indexed {chunks_indexed} chunks.")
+    st.sidebar.success(f"✓ Indexed {chunks_indexed} chunks")
     st.rerun()
