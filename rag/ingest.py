@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
+from rag.chains.retrieval import save_bm25
 from rag.store import DEFAULT_COLLECTION, add_documents
 
 
@@ -59,4 +60,5 @@ def index_document(doc_id: str) -> Tuple[int, str]:
         return 0, DEFAULT_COLLECTION
 
     add_documents(doc_id, all_docs)
+    save_bm25(doc_id, all_docs)
     return len(all_docs), DEFAULT_COLLECTION

@@ -12,7 +12,8 @@ from rag.agents.hallucination import check_hallucination
 from rag.agents.router import route_query
 from rag.agents.rewriter import rewrite_query
 from rag.agents.state import GraphState
-from rag.retrieve import retrieve_top_k
+from rag.chains.retrieval import hybrid_search
+from rag.chains.rerank import rerank
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +25,16 @@ MAX_RETRIES = 3
 # ──────────────────────────────────────────────
 
 def retrieve(state: GraphState) -> GraphState:
-    """Retrieve documents from the vector store."""
+    """Hybrid search (vector + BM25 + RRF) followed by cross-encoder reranking."""
     try:
-        docs = retrieve_top_k(
+        # Fetch a wider candidate set for reranking
+        candidates = hybrid_search(
             doc_id=state["doc_id"],
-            question=state["question"],
-            top_k=5,
+            query=state["question"],
+            k=10,
         )
         # On the first attempt, empty results mean the doc is not indexed
-        if not docs and state["retry_count"] == 0:
+        if not candidates and state["retry_count"] == 0:
             return {
                 "documents": [],
                 "error": (
@@ -40,6 +42,8 @@ def retrieve(state: GraphState) -> GraphState:
                     "Please index the document first."
                 ),
             }
+        # Cross-encoder reranking — keep top 5
+        docs = rerank(state["question"], candidates, top_k=5)
         return {"documents": docs}
     except Exception as e:
         logger.error(f"Retrieve failed: {e}")
