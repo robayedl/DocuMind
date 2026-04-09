@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from langchain_core.documents import Document
@@ -34,6 +35,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="rag-pdf-assistant", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8501"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ==============================
