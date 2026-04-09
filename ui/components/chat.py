@@ -7,21 +7,41 @@ import streamlit as st
 
 API_BASE = "http://localhost:8000"
 
-_INSTRUCTIONS = """
-**How to use:**
+_WELCOME = """
+**Getting started**
+
 1. Upload a PDF using the sidebar on the left
-2. Wait for indexing to complete
-3. Type your question in the box below
-4. Ask follow-up questions — the assistant remembers the conversation
-5. Use **Clear Chat** in the sidebar to start a new conversation
+2. Wait a moment while it indexes
+3. Type your question below — the assistant will answer using only your document
+4. Ask follow-up questions; the assistant remembers the conversation
+5. Use **Clear Chat** in the sidebar to start fresh
 """
 
 
 def render_chat() -> None:
     if not st.session_state.current_doc_id:
-        st.info("Upload a PDF from the sidebar to get started.")
-        with st.expander("How to use", expanded=True):
-            st.markdown(_INSTRUCTIONS)
+        # ── Welcome screen ────────────────────────────────────────────────────
+        st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, #1a2035 0%, #1e2d40 100%);
+            border: 1px solid #2d4a6e;
+            border-radius: 14px;
+            padding: 2rem 2.5rem;
+            max-width: 600px;
+            margin: 2rem auto;
+        ">
+            <h3 style="color:#7eb8f7; margin-top:0;">Welcome 👋</h3>
+            <p style="color:#c0cad8; font-size:0.95rem; line-height:1.7">
+                Upload a PDF from the sidebar to start a conversation with your document.<br><br>
+                This assistant uses <b>hybrid search</b> (semantic + keyword),
+                <b>cross-encoder reranking</b>, and <b>Gemini 2.5 Flash</b> to give you
+                precise, document-grounded answers.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.expander("How to use", expanded=False):
+            st.markdown(_WELCOME)
         return
 
     selected_doc = next(
@@ -29,17 +49,22 @@ def render_chat() -> None:
         None,
     )
     if selected_doc:
-        st.caption(f"Chatting about: **{selected_doc['filename']}**")
+        st.markdown(
+            f"<div style='font-size:0.82rem; color:#8892a4; margin-bottom:0.5rem'>"
+            f"📄 Chatting about <b style='color:#a0aec0'>{selected_doc['filename']}</b>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
-    # ── Render history ─────────────────────────────────────────────────────────
+    # ── Chat history ──────────────────────────────────────────────────────────
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant" and msg.get("sources"):
                 _render_sources(msg["sources"])
 
-    # ── Chat input ─────────────────────────────────────────────────────────────
-    user_input = st.chat_input("Ask a question about the document…")
+    # ── Input ─────────────────────────────────────────────────────────────────
+    user_input = st.chat_input("Ask anything about your document…")
     if not user_input:
         return
 
@@ -56,7 +81,7 @@ def render_chat() -> None:
             return
         except Exception as e:
             error_msg = str(e)
-            if "GOOGLE_API_KEY" in error_msg or "API key" in error_msg.lower():
+            if "GOOGLE_API_KEY" in error_msg or "api key" in error_msg.lower():
                 st.error(
                     "LLM API key is not configured. "
                     "Set GOOGLE_API_KEY in your .env file and restart the backend."
@@ -77,7 +102,6 @@ def render_chat() -> None:
 
 
 def _stream_query(question: str):
-    """Stream tokens from /query/stream and return (full_answer, citations)."""
     sources = []
     answer_placeholder = st.empty()
     answer_placeholder.status("Thinking…", state="running")
@@ -107,7 +131,6 @@ def _stream_query(question: str):
             if line.startswith("event:"):
                 event = line[len("event:"):].strip()
             elif line.startswith("data:"):
-                # Strip only the single SSE protocol space, not all whitespace
                 raw = line[len("data:"):]
                 data = raw[1:] if raw.startswith(" ") else raw
 
@@ -129,13 +152,25 @@ def _stream_query(question: str):
 
 
 def _render_sources(sources: list) -> None:
-    with st.expander("Sources"):
+    with st.expander(f"📚 Sources ({len(sources)})", expanded=False):
         for i, src in enumerate(sources, start=1):
             page = src.get("page", "?")
             text = src.get("text", "")
             ref = src.get("ref", "")
-            st.markdown(f"**Source {i}** — Page {page}  \n`{ref}`")
+
+            st.markdown(
+                f"<div style='font-size:0.82rem; color:#8892a4; margin-bottom:2px'>"
+                f"Source {i} &nbsp;·&nbsp; Page {page} &nbsp;·&nbsp; "
+                f"<code style='font-size:0.75rem'>{ref}</code>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
             if text:
-                st.caption(text[:200] + ("…" if len(text) >= 200 else ""))
-            if i < len(sources):
-                st.divider()
+                st.markdown(
+                    f"<div style='"
+                    f"background:#1a2035; border-left:3px solid #2d4a6e; "
+                    f"border-radius:4px; padding:8px 12px; margin:4px 0 12px 0; "
+                    f"font-size:0.82rem; color:#c0cad8; line-height:1.5"
+                    f"'>{text[:200]}{'…' if len(text) >= 200 else ''}</div>",
+                    unsafe_allow_html=True,
+                )

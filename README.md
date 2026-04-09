@@ -1,46 +1,37 @@
 # RAG PDF Assistant
 
-A FastAPI-based Retrieval-Augmented Generation (RAG) backend that allows users to upload PDF documents, index them using embeddings, and query their content using semantic search.
-
-The system extracts text from uploaded PDFs, splits the text into chunks, generates vector embeddings, stores them in a Chroma vector database, and retrieves the most relevant chunks for a given query.
+An agentic RAG system that lets you upload a PDF and have a conversation with it. Built with FastAPI, LangGraph, Gemini 2.5 Flash, hybrid search (BM25 + vector), and a Streamlit UI.
 
 ---
 
 ## Features
 
-- Upload and store PDF documents
-- Automatic text extraction and chunking
-- Vector embeddings for semantic search
-- ChromaDB vector database
-- FastAPI REST API
-- Docker and Docker Compose support
-- Automated tests with Pytest
-- CI workflow using GitHub Actions
+- Upload and index PDF documents
+- Agentic pipeline: query routing, document grading, query rewriting, hallucination checking
+- Hybrid search: BM25 + semantic vector search fused with Reciprocal Rank Fusion
+- Cross-encoder reranking for precision
+- Conversation memory per session
+- Streaming responses via Server-Sent Events
+- Streamlit chat UI
+- RAGAS evaluation suite
+- Automated tests with pytest
+- CI via GitHub Actions
 
 ---
 
 ## Architecture
 
 ```
-PDF Upload
+User question
      │
      ▼
-Text Extraction (pypdf)
-     │
-     ▼
-Text Chunking
-     │
-     ▼
-Embedding Generation
-     │
-     ▼
-Chroma Vector Database
-     │
-     ▼
-Semantic Retrieval
-     │
-     ▼
-Answer Construction
+LangGraph Agent
+  ├── Router          (retrieval vs. direct response)
+  ├── Retrieve        (hybrid search + cross-encoder rerank)
+  ├── Grade Docs      (relevance filter)
+  ├── Rewrite Query   (retry if no relevant docs)
+  ├── Generate        (Gemini 2.5 Flash + chat history)
+  └── Hallucination   (grounded check, retry if needed)
 ```
 
 ---
@@ -48,46 +39,41 @@ Answer Construction
 ## Project Structure
 
 ```
-rag-pdf-assistant
-│
-├── .github/workflows        # CI pipeline
-├── app                      # FastAPI application
-│   ├── main.py
-│   └── storage.py
-│
-├── rag                      # RAG pipeline
-│   ├── answer.py            # builds final response from retrieved chunks
-│   ├── embed.py             # embedding generation
-│   ├── ingest.py            # PDF parsing and chunk indexing
-│   ├── retrieve.py          # semantic search retrieval
-│   ├── store.py             # vector database interface (Chroma)
-│   └── text_clean.py        # PDF text preprocessing
-│
-├── eval                     # evaluation scripts
-├── tests                    # automated tests
-│
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── pyproject.toml
-├── README.md
+rag-pdf-assistant/
+├── app/
+│   ├── main.py          # FastAPI routes + SSE streaming endpoint
+│   └── storage.py       # doc_id generation, file paths
+├── rag/
+│   ├── agents/          # LangGraph nodes (router, grader, generator, …)
+│   ├── chains/          # generation, retrieval, rerank chains
+│   ├── ingest.py        # PDF parsing, chunking, indexing
+│   ├── llm.py           # Gemini LLM + HuggingFace embeddings
+│   └── store.py         # ChromaDB interface
+├── ui/
+│   ├── streamlit_app.py
+│   └── components/      # sidebar, chat
+├── eval/
+│   ├── test_queries.json  # sample Q&A pairs for evaluation
+│   ├── ragas_eval.py      # RAGAS evaluation logic
+│   └── run_eval.py        # CLI runner + results summary
+├── tests/               # pytest suite
 ├── .env.example
-├── .dockerignore
-└── .gitignore
+├── requirements.txt
+└── docker-compose.yml
 ```
 
 ---
 
-## Installation (Local Development)
+## Installation
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/robayedl/rag-pdf-assistant.git
 cd rag-pdf-assistant
 ```
 
-### 2. Create a virtual environment
+### 2. Create virtual environment
 
 ```bash
 python -m venv .venv
@@ -100,158 +86,50 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Run the API
+### 4. Configure environment
 
 ```bash
-uvicorn app.main:app --reload
+cp .env.example .env
+# Edit .env and set your GOOGLE_API_KEY
 ```
 
-API will run at:
+---
 
+## Running
+
+### Start the backend (port 8000)
+
+```bash
+uvicorn app.main:app --reload --port 8000
 ```
-http://127.0.0.1:8000
+
+### Start the Streamlit UI (port 8501)
+
+```bash
+streamlit run ui/streamlit_app.py --server.port 8501
 ```
+
+Open [http://localhost:8501](http://localhost:8501) in your browser.
 
 ---
 
 ## Running with Docker
 
-### Build and start the service
-
 ```bash
 docker compose up --build
-```
-
-The API will be available at:
-
-```
-http://localhost:8000
-```
-
-The following directories are mounted as volumes:
-
-- `storage/` – stores uploaded PDFs
-- `chroma_db/` – stores vector embeddings
-
-This ensures that data persists across container restarts.
-
----
-
-## Environment Variables
-
-Create a `.env` file using the provided example.
-
-```bash
-cp .env.example .env
-```
-
-Example configuration:
-
-```
-ENVIRONMENT=local
-STORAGE_DIR=storage
-CHROMA_DIR=chroma_db
 ```
 
 ---
 
 ## API Endpoints
 
-### Health Check
-
-```
-GET /health
-```
-
-Example response:
-
-```json
-{
-  "status": "ok",
-  "environment": "local"
-}
-```
-
----
-
-### Upload a PDF
-
-```
-POST /documents
-```
-
-Example request:
-
-```bash
-curl -F "file=@resume.pdf" http://127.0.0.1:8000/documents
-```
-
-Example response:
-
-```json
-{
-  "doc_id": "abc123",
-  "filename": "resume.pdf",
-  "stored_path": "storage/pdfs/abc123.pdf"
-}
-```
-
----
-
-### Index a Document
-
-```
-POST /documents/{doc_id}/index
-```
-
-Example:
-
-```bash
-curl -X POST http://127.0.0.1:8000/documents/<doc_id>/index
-```
-
-Example response:
-
-```json
-{
-  "doc_id": "abc123",
-  "chunks_indexed": 24,
-  "collection": "pdf_chunks"
-}
-```
-
----
-
-### Query the Document
-
-```
-POST /query
-```
-
-Example request:
-
-```bash
-curl -X POST http://127.0.0.1:8000/query \
--H "Content-Type: application/json" \
--d '{
-  "doc_id": "abc123",
-  "question": "What skills are listed in the document?",
-  "top_k": 5
-}'
-```
-
-Example response:
-
-```json
-{
-  "doc_id": "abc123",
-  "question": "What skills are listed in the document?",
-  "answer": "Machine Learning, Computer Vision, PyTorch, OpenCV, TensorFlow",
-  "citations": [],
-  "retrieved": 5,
-  "latency_ms": 23.1
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| POST | `/documents` | Upload a PDF |
+| POST | `/documents/{doc_id}/index` | Index a document |
+| POST | `/query` | Ask a question (full response) |
+| POST | `/query/stream` | Ask a question (SSE streaming) |
 
 ---
 
@@ -261,40 +139,38 @@ Example response:
 pytest -q
 ```
 
-Tests validate:
-
-- Query validation rules
-- Missing document handling
-- API response schema
-
 ---
 
-## Continuous Integration
+## RAGAS Evaluation
 
-GitHub Actions runs automatically on push and pull requests.
+Evaluate the RAG pipeline quality using [RAGAS](https://docs.ragas.io) metrics: faithfulness, answer relevancy, context precision, and context recall.
 
-Pipeline includes:
+### 1. Upload and index a PDF via the API
 
-- dependency installation
-- automated tests
+```bash
+# Upload
+DOC_ID=$(curl -s -F "file=@your_document.pdf" http://localhost:8000/documents | python3 -c "import sys,json; print(json.load(sys.stdin)['doc_id'])")
 
-Workflow configuration is located in:
-
+# Index
+curl -s -X POST http://localhost:8000/documents/$DOC_ID/index
 ```
-.github/workflows/
+
+### 2. Edit the test queries (optional)
+
+Open `eval/test_queries.json` and replace `"REPLACE_WITH_YOUR_DOC_ID"` with your actual `doc_id`, and update the `ground_truth` values to match your document.
+
+### 3. Run evaluation
+
+```bash
+# Using the --doc-id flag to override all queries at once:
+python eval/run_eval.py --doc-id <your_doc_id>
 ```
 
----
+### 4. View results
 
-## Future Improvements
+Results are saved to `eval/results.json` with a timestamp. The latest scores also appear in the Streamlit sidebar under **Evaluation Scores**.
 
-Possible future improvements:
-
-- LLM-based answer generation
-- Streaming responses
-- Hybrid search (BM25 + embeddings)
-- Advanced chunking strategies
-- Query evaluation benchmarks
+**Pass criteria:** `faithfulness ≥ 0.7` and `answer_relevancy ≥ 0.7`
 
 ---
 

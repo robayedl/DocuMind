@@ -30,9 +30,12 @@ langchain-huggingface
 langchain-chroma
 langchain-text-splitters
 rank-bm25
-google-generativeai
+google-genai
 langgraph
 
 streamlit
 watchdog
 sse-starlette<2.0
+
+ragas
+datasets
