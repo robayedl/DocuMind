@@ -35,3 +35,4 @@ langgraph
 
 streamlit
 watchdog
+sse-starlette<2.0

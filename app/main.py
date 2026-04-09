@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 
 from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from langchain_core.documents import Document
@@ -175,3 +177,72 @@ def query(req: QueryRequest) -> QueryResponse:
         retries=state.get("retry_count", 0),
         latency_ms=round(latency_ms, 2),
     )
+
+
+class StreamQueryRequest(BaseModel):
+    doc_id: str = Field(..., min_length=1)
+    question: str = Field(..., min_length=2)
+    session_id: Optional[str] = Field(None)
+
+
+@app.post("/query/stream")
+async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
+    path = pdf_path(req.doc_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            import asyncio
+
+            # Run the full agent pipeline in a thread to preserve answer quality
+            # (routing, grading, query rewriting, hallucination checking all apply)
+            loop = asyncio.get_event_loop()
+            state = await loop.run_in_executor(
+                None,
+                lambda: run_agent(
+                    question=req.question,
+                    doc_id=req.doc_id,
+                    session_id=req.session_id or "",
+                ),
+            )
+
+            answer: str = state.get("generation", "")
+            docs: List[Document] = state.get("documents", [])
+
+            if not answer and not docs:
+                yield _sse("error", "Document not indexed.")
+                return
+
+            if not answer:
+                yield _sse("error", "Could not generate an answer. Try rephrasing your question.")
+                return
+
+            # Stream the answer word by word so tokens appear progressively
+            words = answer.split(" ")
+            for i, word in enumerate(words):
+                token = word if i == 0 else " " + word
+                yield _sse("token", token)
+                await asyncio.sleep(0.018)
+
+            citations = [
+                {
+                    "ref": d.metadata.get("ref", ""),
+                    "page": d.metadata.get("page", -1),
+                    "chunk_id": d.metadata.get("chunk_id", -1),
+                    "source": d.metadata.get("source", ""),
+                    "text": d.page_content[:200],
+                }
+                for d in docs
+            ]
+            yield _sse("citations", json.dumps(citations))
+            yield _sse("done", "")
+
+        except Exception as e:
+            yield _sse("error", str(e))
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _sse(event: str, data: str) -> str:
+    return f"event: {event}\ndata: {data}\n\n"
