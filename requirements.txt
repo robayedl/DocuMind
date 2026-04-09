@@ -32,3 +32,6 @@ langchain-text-splitters
 rank-bm25
 google-generativeai
 langgraph
+
+streamlit
+watchdog
