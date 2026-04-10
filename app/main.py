@@ -12,7 +12,7 @@ load_dotenv()
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from langchain_core.documents import Document
@@ -38,9 +38,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="rag-pdf-assistant", lifespan=lifespan)
 
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8501").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8501"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -132,6 +133,14 @@ def index(doc_id: str) -> IndexResponse:
         chunks_indexed=chunks_indexed,
         collection=collection_name,
     )
+
+
+@app.get("/documents/{doc_id}/file")
+def get_document_file(doc_id: str) -> FileResponse:
+    path = pdf_path(doc_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
 
 
 @app.post("/query", response_model=QueryResponse)
