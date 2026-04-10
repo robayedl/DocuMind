@@ -5,13 +5,16 @@ __pycache__/
 *.pyo
 *.pyd
 *.egg-info/
+*.egg
 dist/
 build/
 .pytest_cache/
-testfile.pdf
+.coverage
+htmlcov/
 
-# Env
+# Environment
 .env
+.env.*
 
 # macOS
 .DS_Store
@@ -20,15 +23,25 @@ testfile.pdf
 .vscode/
 .idea/
 
-# App data 
+# App data
 storage/
 chroma_db/
 data/
+
+# Logs
+*.log
+logs/
+
+# Evaluation output
 eval/results.json
 eval/report.json
 eval/report.md
 
+# Credentials & keys
+*.pem
+*.key
+*.crt
+.aws/
 
-
-
-
+# Test artifacts
+testfile.pdf

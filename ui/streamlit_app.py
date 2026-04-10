@@ -10,6 +10,7 @@ import streamlit as st
 
 from ui.components.sidebar import render_sidebar
 from ui.components.chat import render_chat
+from ui.components.pdf_viewer import render_pdf_viewer
 
 st.set_page_config(
     page_title="RAG PDF Assistant",
@@ -21,32 +22,24 @@ st.set_page_config(
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* Main background */
 .stApp { background-color: #0f1117; }
 
-/* Sidebar */
 [data-testid="stSidebar"] {
     background-color: #161b27;
     border-right: 1px solid #2a2f3e;
 }
-
-/* Sidebar title */
 [data-testid="stSidebar"] h1 {
     font-size: 1.1rem !important;
     font-weight: 700;
     letter-spacing: 0.04em;
     color: #e2e8f0;
 }
-
-/* File uploader */
 [data-testid="stFileUploader"] {
     background: #1e2433;
     border: 1px dashed #3a4155;
     border-radius: 8px;
     padding: 4px;
 }
-
-/* Chat input */
 [data-testid="stChatInput"] textarea {
     background-color: #1e2433 !important;
     border: 1px solid #3a4155 !important;
@@ -54,20 +47,14 @@ st.markdown("""
     color: #e2e8f0 !important;
     font-size: 0.95rem;
 }
-
-/* Chat messages */
 [data-testid="stChatMessage"] {
     border-radius: 12px;
     padding: 4px 8px;
     margin-bottom: 4px;
 }
-
-/* User message bubble */
 [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
     background-color: #1a2035;
 }
-
-/* Buttons */
 .stButton > button {
     background-color: #1e2d40;
     border: 1px solid #2d4a6e;
@@ -81,24 +68,14 @@ st.markdown("""
     border-color: #7eb8f7;
     color: #ffffff;
 }
-
-/* Expander (Sources) */
 [data-testid="stExpander"] {
     background-color: #161b27;
     border: 1px solid #2a2f3e;
     border-radius: 8px;
 }
-
-/* Divider */
 hr { border-color: #2a2f3e !important; }
-
-/* Radio buttons */
 [data-testid="stRadio"] label { font-size: 0.85rem; }
-
-/* Status widget */
 [data-testid="stStatus"] { border-radius: 8px; }
-
-/* Page title */
 h1 { font-weight: 700 !important; letter-spacing: -0.02em; }
 </style>
 """, unsafe_allow_html=True)
@@ -109,15 +86,34 @@ for key, default in [
     ("current_doc_id", None),
     ("chat_history", []),
     ("session_id", str(uuid.uuid4())),
+    ("show_pdf", False),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
 
-# ── Layout ─────────────────────────────────────────────────────────────────────
+# ── Sidebar ────────────────────────────────────────────────────────────────────
 render_sidebar()
 
-st.markdown("## 📄 RAG PDF Assistant")
-st.caption("Ask questions about your PDF — answers are grounded strictly in your document.")
+# ── Header ─────────────────────────────────────────────────────────────────────
+header_left, header_right = st.columns([6, 1])
+with header_left:
+    st.markdown("## 📄 RAG PDF Assistant")
+    st.caption("Ask questions about your PDF — answers are grounded strictly in your document.")
+with header_right:
+    if st.session_state.current_doc_id:
+        label = "Hide PDF 📕" if st.session_state.show_pdf else "View PDF 📖"
+        if st.button(label, use_container_width=True):
+            st.session_state.show_pdf = not st.session_state.show_pdf
+            st.rerun()
+
 st.divider()
 
-render_chat()
+# ── Main layout ────────────────────────────────────────────────────────────────
+if st.session_state.show_pdf and st.session_state.current_doc_id:
+    chat_col, pdf_col = st.columns([1, 1], gap="large")
+    with chat_col:
+        render_chat()
+    with pdf_col:
+        render_pdf_viewer()
+else:
+    render_chat()

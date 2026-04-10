@@ -200,7 +200,7 @@ def test_full_pipeline_end_to_end(tmp_path, monkeypatch):
     pdf_dir.mkdir(parents=True)
     (pdf_dir / f"{doc_id}.pdf").write_bytes(b"placeholder")
 
-    with patch("rag.ingest.extract_pages", return_value=["Python is a programming language."]):
+    with patch("rag.ingest.extract_pages", return_value=[(1, "Python is a programming language.")]):
         from rag.ingest import index_document
         index_document(doc_id)
 

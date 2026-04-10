@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
 from pathlib import Path
 from typing import List, Tuple
 
+import pdfplumber
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pypdf import PdfReader
 
 from rag.chains.retrieval import save_bm25
 from rag.store import DEFAULT_COLLECTION, add_documents
+
+_SPLITTER = RecursiveCharacterTextSplitter(
+    chunk_size=800,
+    chunk_overlap=100,
+    separators=["\n\n", "\n", ". ", " ", ""],
+)
 
 
 def get_storage_dir() -> Path:
@@ -20,9 +28,29 @@ def get_pdf_path(doc_id: str) -> Path:
     return get_storage_dir() / "pdfs" / f"{doc_id}.pdf"
 
 
-def extract_pages(pdf_path: Path) -> List[str]:
-    reader = PdfReader(str(pdf_path))
-    return [p.extract_text() or "" for p in reader.pages]
+def _clean_text(text: str) -> str:
+    """Normalise PDF-extracted text: fix ligatures, strip junk, normalise whitespace."""
+    # Decompose Unicode ligatures (ﬁ→fi, ﬂ→fl, ﬀ→ff, etc.)
+    text = unicodedata.normalize("NFKD", text)
+    # Remove non-printable / control characters (keep printable ASCII + newlines)
+    text = re.sub(r"[^\x20-\x7E\n]", " ", text)
+    # Collapse runs of spaces/tabs to a single space
+    text = re.sub(r"[ \t]+", " ", text)
+    # Collapse 3+ consecutive newlines to a paragraph break
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def extract_pages(pdf_path: Path) -> List[Tuple[int, str]]:
+    """Return (page_number, cleaned_text) pairs via pdfplumber."""
+    pages: List[Tuple[int, str]] = []
+    with pdfplumber.open(str(pdf_path)) as pdf:
+        for i, page in enumerate(pdf.pages, start=1):
+            raw = page.extract_text(x_tolerance=2, y_tolerance=2) or ""
+            cleaned = _clean_text(raw)
+            if cleaned:
+                pages.append((i, cleaned))
+    return pages
 
 
 def index_document(doc_id: str) -> Tuple[int, str]:
@@ -32,15 +60,15 @@ def index_document(doc_id: str) -> Tuple[int, str]:
 
     pages = extract_pages(pdf_path)
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-
     all_docs: List[Document] = []
     source_name = pdf_path.name
     chunk_id = 0
 
-    for page_idx, page_text in enumerate(pages, start=1):
-        chunks = splitter.split_text(page_text)
+    for page_idx, page_text in pages:
+        chunks = _SPLITTER.split_text(page_text)
         for c in chunks:
+            if not c.strip():
+                continue
             ref = f"{doc_id}_p{page_idx}_c{chunk_id}"
             all_docs.append(
                 Document(

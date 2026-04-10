@@ -9,7 +9,9 @@ from langchain_core.documents import Document
 
 from rag.llm import get_embeddings
 
-DEFAULT_COLLECTION = "pdf_chunks"
+# Bump this when the embedding model changes to force a clean rebuild
+EMBEDDING_VERSION = "v2"
+DEFAULT_COLLECTION = f"pdf_chunks_{EMBEDDING_VERSION}"
 
 
 def get_chroma_dir() -> str:
