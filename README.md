@@ -29,40 +29,34 @@
 
 ## Architecture
 
-```
-                        ┌─────────────────────────────────────────┐
-                        │           LangGraph Agent Loop           │
-                        │                                          │
-   User Question ──────►│  ┌─────────┐    ┌──────────┐           │
-                        │  │ Router  │───►│ Retrieve  │           │
-                        │  └─────────┘    └────┬─────┘           │
-                        │   direct │           │                  │
-                        │          ▼      ┌────▼──────┐           │
-                        │   ┌────────┐   │ Grade Docs │           │
-                        │   │ Direct │   └────┬──────┘           │
-                        │   │ Answer │        │ relevant          │
-                        │   └────────┘        │                  │
-                        │                ┌────▼──────┐           │
-                        │       ┌────────┤  Generate  │           │
-                        │       │        └────┬──────┘           │
-                        │  no relevant        │                  │
-                        │  docs found    ┌────▼────────────┐     │
-                        │       │        │ Hallucination    │     │
-                        │       ▼        │ Check           │     │
-                        │  ┌─────────┐  └────┬────────────┘     │
-                        │  │Rewrite  │◄──────┘ not grounded      │
-                        │  │ Query   │  (retry up to 3x)         │
-                        │  └─────────┘                           │
-                        │                    │ grounded           │
-                        └────────────────────┼───────────────────┘
-                                             ▼
-                                      Final Response
-                                    + Source Citations
+```mermaid
+flowchart TD
+    Q([User Question]) --> R[Router]
+
+    R -->|direct| DA[Direct Answer]
+    DA --> E1([END])
+
+    R -->|retrieve| RET[Retrieve]
+    RET --> GD[Grade Docs]
+
+    GD -->|relevant docs| GEN[Generate]
+    GD -->|no docs · retry < 3| RW[Rewrite Query]
+    GD -->|no docs · max retries| FB[Fallback]
+
+    RW --> RET
+
+    GEN --> HC[Hallucination Check]
+
+    HC -->|grounded| RESP([Final Response + Citations])
+    HC -->|not grounded · retry < 3| GEN
+    HC -->|max retries| FB
+
+    FB --> E2([END])
 ```
 
 **Retrieval Pipeline:**
 ```
-Query ──► BM25 Sparse Search ──┐
+Query ──► BM25 Sparse Search  ─┐
                                 ├──► RRF Fusion ──► Cross-Encoder Rerank ──► Top-K Chunks
 Query ──► Vector Dense Search ─┘
 ```
