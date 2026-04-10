@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
@@ -204,7 +203,7 @@ def test_full_pipeline_end_to_end(tmp_path, monkeypatch):
         from rag.ingest import index_document
         index_document(doc_id)
 
-    from rag.agents.graph import build_graph, route_query, grade_documents, generate, check_hallucination
+    from rag.agents.graph import build_graph
     fake_doc = _fake_doc("Python is a programming language.")
 
     with patch("rag.agents.graph.route_query", return_value={"route": "retrieve"}), \

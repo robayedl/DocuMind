@@ -4,7 +4,6 @@ import json
 import os
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import AsyncIterator, List, Optional
 
 from dotenv import load_dotenv
