@@ -9,6 +9,28 @@ services:
       ENVIRONMENT: docker
       CHROMA_DIR: /app/chroma_db
       STORAGE_DIR: /app/storage
+      CORS_ORIGINS: http://localhost:8501
     volumes:
       - ./storage:/app/storage
       - ./chroma_db:/app/chroma_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  streamlit:
+    build: .
+    command: streamlit run ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      BACKEND_URL: http://api:8000
+    volumes:
+      - ./storage:/app/storage
+      - ./chroma_db:/app/chroma_db
+    depends_on:
+      api:
+        condition: service_healthy

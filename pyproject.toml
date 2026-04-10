@@ -12,3 +12,10 @@ requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+exclude = [".venv", "__pycache__"]
+
+[tool.ruff.lint]
+ignore = ["E402"]

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import base64
+import os
 
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
 def render_pdf_viewer() -> None:

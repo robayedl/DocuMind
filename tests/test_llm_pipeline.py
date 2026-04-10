@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 
 def test_llm_init(monkeypatch):
     """LLM initialises correctly when GOOGLE_API_KEY is present."""
