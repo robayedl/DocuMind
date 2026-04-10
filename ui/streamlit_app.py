@@ -13,8 +13,8 @@ from ui.components.chat import render_chat
 from ui.components.pdf_viewer import render_pdf_viewer
 
 st.set_page_config(
-    page_title="RAG PDF Assistant",
-    page_icon="📄",
+    page_title="DocuMind",
+    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded",
 )

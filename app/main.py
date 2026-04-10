@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="rag-pdf-assistant", lifespan=lifespan)
+app = FastAPI(title="DocuMind", lifespan=lifespan)
 
 _cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8501").split(",")
 app.add_middleware(
@@ -203,10 +203,17 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
         try:
             import asyncio
 
-            # Run the full agent pipeline in a thread to preserve answer quality
-            # (routing, grading, query rewriting, hallucination checking all apply)
+            _STATUS_STEPS = [
+                "Routing your question…",
+                "Searching the document…",
+                "Reading relevant sections…",
+                "Grading document quality…",
+                "Generating answer…",
+                "Checking for accuracy…",
+            ]
+
             loop = asyncio.get_event_loop()
-            state = await loop.run_in_executor(
+            future = loop.run_in_executor(
                 None,
                 lambda: run_agent(
                     question=req.question,
@@ -214,6 +221,18 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
                     session_id=req.session_id or "",
                 ),
             )
+
+            # Emit status messages every 2.5 s while the agent runs
+            step = 0
+            yield _sse("status", _STATUS_STEPS[step])
+            step += 1
+            while not future.done():
+                await asyncio.sleep(2.5)
+                if not future.done() and step < len(_STATUS_STEPS):
+                    yield _sse("status", _STATUS_STEPS[step])
+                    step += 1
+
+            state = await future
 
             answer: str = state.get("generation", "")
             docs: List[Document] = state.get("documents", [])

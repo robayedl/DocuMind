@@ -2,9 +2,9 @@
 
 
 [project]
-name = "rag-pdf-assistant"
+name = "documind"
 version = "0.1.0"
-description = "FastAPI-based RAG system for querying PDF documents using embeddings and ChromaDB"
+description = "DocuMind — Agentic Document Intelligence powered by LangGraph, Gemini, and hybrid search"
 authors = [
     {name = "Robayed Ashraf"}
 ]

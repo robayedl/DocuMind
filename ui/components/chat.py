@@ -31,7 +31,7 @@ def render_chat() -> None:
             max-width: 600px;
             margin: 2rem auto;
         ">
-            <h3 style="color:#7eb8f7; margin-top:0;">Welcome 👋</h3>
+            <h3 style="color:#7eb8f7; margin-top:0;">Welcome to DocuMind 🧠</h3>
             <p style="color:#c0cad8; font-size:0.95rem; line-height:1.7">
                 Upload a PDF from the sidebar to start a conversation with your document.<br><br>
                 This assistant uses <b>hybrid search</b> (semantic + keyword),
@@ -104,8 +104,8 @@ def render_chat() -> None:
 
 def _stream_query(question: str):
     sources = []
+    status_placeholder = st.empty()
     answer_placeholder = st.empty()
-    answer_placeholder.status("Thinking…", state="running")
     full_answer = ""
     first_token = True
 
@@ -135,15 +135,25 @@ def _stream_query(question: str):
                 raw = line[len("data:"):]
                 data = raw[1:] if raw.startswith(" ") else raw
 
-                if event == "token":
+                if event == "status":
+                    status_placeholder.markdown(
+                        f"<div style='color:#7eb8f7; font-size:0.88rem; "
+                        f"padding:4px 0; display:flex; align-items:center; gap:8px'>"
+                        f"<span style='display:inline-block; width:8px; height:8px; "
+                        f"background:#7eb8f7; border-radius:50%; "
+                        f"animation:pulse 1s infinite'></span>{data}</div>",
+                        unsafe_allow_html=True,
+                    )
+                elif event == "token":
                     if first_token:
-                        answer_placeholder.empty()
+                        status_placeholder.empty()
                         first_token = False
                     full_answer += data
                     answer_placeholder.markdown(full_answer + "▌")
                 elif event == "citations":
                     sources = json.loads(data)
                 elif event == "error":
+                    status_placeholder.empty()
                     raise RuntimeError(data)
                 elif event == "done":
                     answer_placeholder.markdown(full_answer)
