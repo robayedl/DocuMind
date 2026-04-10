@@ -1,8 +1,8 @@
-# RAG PDF Assistant — Agentic RAG System
+# DocuMind — Agentic Document Intelligence
 
 > Chat with any PDF using a production-grade agentic pipeline powered by LangGraph, Gemini 2.5 Flash, hybrid search, and real-time streaming.
 
-[![CI](https://github.com/robayedl/rag-pdf-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/robayedl/rag-pdf-assistant/actions/workflows/ci.yml)
+[![CI](https://github.com/robayedl/documind/actions/workflows/ci.yml/badge.svg)](https://github.com/robayedl/documind/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
 ![LangGraph](https://img.shields.io/badge/LangGraph-agentic-purple)
@@ -90,8 +90,8 @@ Query ──► Vector Dense Search ─┘
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/robayedl/rag-pdf-assistant.git
-cd rag-pdf-assistant
+git clone https://github.com/robayedl/documind.git
+cd documind
 
 # 2. Set your API key
 cp .env.example .env
@@ -113,8 +113,8 @@ docker compose up --build
 
 ```bash
 # 1. Clone & enter directory
-git clone https://github.com/robayedl/rag-pdf-assistant.git
-cd rag-pdf-assistant
+git clone https://github.com/robayedl/documind.git
+cd documind
 
 # 2. Create virtual environment
 python -m venv .venv
@@ -220,7 +220,7 @@ cat eval/results.json
 ## Project Structure
 
 ```
-rag-pdf-assistant/
+documind/
 ├── app/
 │   ├── main.py              # FastAPI app — all routes + SSE streaming
 │   └── storage.py           # doc_id generation, file path helpers

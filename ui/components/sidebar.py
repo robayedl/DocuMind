@@ -70,7 +70,7 @@ def render_sidebar() -> None:
         "<b>Powered by</b><br>"
         "Gemini 2.5 Flash &nbsp;·&nbsp; LangGraph<br>"
         "Hybrid Search &nbsp;·&nbsp; Cross-Encoder Reranking<br><br>"
-        "© 2026 RAG PDF Assistant"
+        "© 2026 DocuMind"
         "</div>",
         unsafe_allow_html=True,
     )
