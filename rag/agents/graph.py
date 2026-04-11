@@ -52,12 +52,13 @@ def retrieve(state: GraphState) -> GraphState:
 
 def direct_response(state: GraphState) -> GraphState:
     """Return a response for general conversation (no retrieval needed)."""
-    return {
-        "generation": (
-            "Hello! I'm a PDF assistant. Please ask me a question about your "
-            "document and I'll look it up for you."
-        )
-    }
+    question = state.get("question", "").strip().lower()
+    greetings = {"hi", "hello", "hey", "hiya", "howdy", "sup", "what's up", "whats up"}
+    if any(question == g or question.startswith(g + " ") for g in greetings):
+        reply = "Hey! Ask me anything about your document and I'll find the answer for you."
+    else:
+        reply = "I can only answer questions about the document you've uploaded. What would you like to know?"
+    return {"generation": reply}
 
 
 def fallback(state: GraphState) -> GraphState:

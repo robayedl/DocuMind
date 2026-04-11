@@ -9,7 +9,40 @@ API_BASE = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
 def render_sidebar() -> None:
-    st.sidebar.markdown("## 📂 Documents")
+    st.sidebar.markdown("""
+    <div style="
+        display: flex; align-items: center; gap: 10px;
+        padding: 0.8rem 0 1rem 0;
+        border-bottom: 1px solid #2a2f3e;
+        margin-bottom: 1.1rem;
+    ">
+        <div style="
+            background: linear-gradient(135deg, #1e3a5f 0%, #0f2540 100%);
+            border: 1px solid #2d5a8e;
+            border-radius: 9px;
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.15rem; flex-shrink: 0;
+            box-shadow: 0 0 14px rgba(126,184,247,0.2);
+        ">🧠</div>
+        <div>
+            <div style="
+                font-size: 1.25rem;
+                font-weight: 900;
+                letter-spacing: -0.03em;
+                line-height: 1.1;
+                background: linear-gradient(90deg, #7eb8f7 0%, #a78bfa 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            ">DocuMind</div>
+            <div style="font-size:0.7rem; color:#556070; letter-spacing:0.03em;">v1.0.0</div>
+        </div>
+    </div>
+    <div style="font-size:0.8rem; color:#8892a4; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; margin-bottom:0.6rem;">
+        📂 Your Documents
+    </div>
+    """, unsafe_allow_html=True)
 
     # ── Upload ────────────────────────────────────────────────────────────────
     uploaded_file = st.sidebar.file_uploader(
