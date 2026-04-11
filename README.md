@@ -10,6 +10,12 @@
 
 ---
 
+## Demo
+
+https://github.com/user-attachments/assets/290e7caf-6676-43c2-9f9f-9df63d28c3f9
+
+---
+
 ## Features
 
 | Feature | Description |
@@ -263,12 +269,6 @@ documind/
 ├── docker-compose.yml       # Multi-service: api + streamlit
 └── requirements.txt
 ```
-
----
-
-## Demo
-
-https://github.com/user-attachments/assets/290e7caf-6676-43c2-9f9f-9df63d28c3f9
 
 ---
 
