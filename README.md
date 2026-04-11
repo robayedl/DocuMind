@@ -266,9 +266,9 @@ documind/
 
 ---
 
-## Screenshots
+## Demo
 
-> *Screenshots coming soon — upload a PDF, ask questions, see sources cited inline.*
+https://github.com/user-attachments/assets/290e7caf-6676-43c2-9f9f-9df63d28c3f9
 
 ---
 

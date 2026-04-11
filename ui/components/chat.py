@@ -23,21 +23,83 @@ def render_chat() -> None:
     if not st.session_state.current_doc_id:
         # ── Welcome screen ────────────────────────────────────────────────────
         st.markdown("""
-        <div style="
-            background: linear-gradient(135deg, #1a2035 0%, #1e2d40 100%);
+        <style>
+        @keyframes glow-pulse {
+            0%, 100% { box-shadow: 0 0 18px rgba(126,184,247,0.2), 0 0 40px rgba(167,139,250,0.1); }
+            50%       { box-shadow: 0 0 28px rgba(126,184,247,0.35), 0 0 60px rgba(167,139,250,0.2); }
+        }
+        .dm-pill {
+            background: linear-gradient(135deg, #1a2a40, #1e2d40);
             border: 1px solid #2d4a6e;
-            border-radius: 14px;
-            padding: 2rem 2.5rem;
-            max-width: 600px;
-            margin: 2rem auto;
+            border-radius: 20px;
+            padding: 5px 14px;
+            font-size: 0.83rem;
+            color: #7eb8f7;
+            display: inline-block;
+        }
+        </style>
+        <div style="
+            background: linear-gradient(145deg, #0e1625 0%, #141e35 50%, #111828 100%);
+            border: 1px solid #253550;
+            border-radius: 20px;
+            padding: 2.8rem 2.8rem 2.2rem 2.8rem;
+            max-width: 640px;
+            margin: 2.5rem auto 1.5rem auto;
+            position: relative;
+            overflow: hidden;
         ">
-            <h3 style="color:#7eb8f7; margin-top:0;">Welcome to DocuMind 🧠</h3>
-            <p style="color:#c0cad8; font-size:0.95rem; line-height:1.7">
-                Upload a PDF from the sidebar to start a conversation with your document.<br><br>
-                This assistant uses <b>hybrid search</b> (semantic + keyword),
-                <b>cross-encoder reranking</b>, and <b>Gemini 2.5 Flash</b> to give you
-                precise, document-grounded answers.
+            <div style="
+                position:absolute; top:-40px; right:-40px;
+                width:160px; height:160px;
+                background: radial-gradient(circle, rgba(167,139,250,0.12) 0%, transparent 70%);
+                pointer-events:none;
+            "></div>
+            <div style="display:flex; align-items:center; gap:14px; margin-bottom:1.5rem;">
+                <div style="
+                    background: linear-gradient(135deg, #1e3a5f 0%, #0f2540 100%);
+                    border: 1px solid #2d5a8e;
+                    border-radius: 14px;
+                    width: 52px; height: 52px;
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 1.7rem;
+                    animation: glow-pulse 3s ease-in-out infinite;
+                ">🧠</div>
+                <div>
+                    <div style="
+                        font-size: 1.9rem;
+                        font-weight: 900;
+                        letter-spacing: -0.04em;
+                        line-height: 1.05;
+                        background: linear-gradient(90deg, #7eb8f7 0%, #a78bfa 55%, #f0abfc 100%);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                        background-clip: text;
+                    ">DocuMind</div>
+                    <div style="font-size:0.8rem; color:#4a5568; letter-spacing:0.06em; text-transform:uppercase; font-weight:600;">
+                        Agentic Document Intelligence
+                    </div>
+                </div>
+            </div>
+            <div style="font-size:1.15rem; font-weight:700; color:#dde6f5; margin-bottom:0.6rem; line-height:1.4;">
+                Ask anything about your document.<br>
+                <span style="
+                    background: linear-gradient(90deg, #a78bfa, #f0abfc);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                ">Get answers you can trust.</span>
+            </div>
+            <p style="color:#8895aa; font-size:0.93rem; line-height:1.8; margin:0 0 1.6rem 0;">
+                Upload a PDF from the sidebar. Ask a question and DocuMind will find the relevant parts,
+                generate an answer based only on your document, and show you exactly where it came from.
             </p>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                <span class="dm-pill">⚡ Hybrid Search</span>
+                <span class="dm-pill">🎯 Cross-Encoder Reranking</span>
+                <span class="dm-pill">✨ Gemini 2.5 Flash</span>
+                <span class="dm-pill">🔗 LangGraph Agent</span>
+                <span class="dm-pill">🛡 Hallucination Guard</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -92,14 +154,12 @@ def render_chat() -> None:
             st.session_state.chat_history.pop()
             return
 
-        if sources:
-            _render_sources(sources)
-
     st.session_state.chat_history.append({
         "role": "assistant",
         "content": answer,
         "sources": sources,
     })
+    st.rerun()
 
 
 def _stream_query(question: str):

@@ -97,8 +97,34 @@ render_sidebar()
 # ── Header ─────────────────────────────────────────────────────────────────────
 header_left, header_right = st.columns([6, 1])
 with header_left:
-    st.markdown("## 📄 RAG PDF Assistant")
-    st.caption("Ask questions about your PDF — answers are grounded strictly in your document.")
+    st.markdown("""
+    <div style="display:flex; align-items:center; gap:16px; padding: 0.4rem 0 0.6rem 0;">
+        <div style="
+            background: linear-gradient(135deg, #1e3a5f 0%, #0f2540 100%);
+            border: 1px solid #2d5a8e;
+            border-radius: 14px;
+            width: 52px; height: 52px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.7rem; flex-shrink: 0;
+            box-shadow: 0 0 20px rgba(126,184,247,0.25), 0 0 40px rgba(167,139,250,0.1);
+        ">🧠</div>
+        <div>
+            <div style="
+                font-size: 2.1rem;
+                font-weight: 900;
+                letter-spacing: -0.04em;
+                line-height: 1.05;
+                background: linear-gradient(90deg, #7eb8f7 0%, #a78bfa 55%, #f0abfc 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            ">DocuMind</div>
+            <div style="font-size:0.92rem; color:#7a8aa8; letter-spacing:0.01em; margin-top:1px;">
+                Intelligent answers &nbsp;·&nbsp; grounded in your document
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 with header_right:
     if st.session_state.current_doc_id:
         label = "Hide PDF 📕" if st.session_state.show_pdf else "View PDF 📖"

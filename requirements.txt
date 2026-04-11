@@ -36,5 +36,5 @@ streamlit
 watchdog
 
 # Evaluation
-ragas
+ragas==0.0.22
 datasets
