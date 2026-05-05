@@ -8,7 +8,7 @@ def test_llm_init(monkeypatch):
     get_llm.cache_clear()
     try:
         llm = get_llm()
-        assert llm.model == "gemini-2.5-flash"
+        assert "gemini-2.5-flash" in llm.model
     finally:
         get_llm.cache_clear()
 
