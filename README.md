@@ -94,16 +94,20 @@ Query ──► Vector Dense Search ─┘
 
 ### Option 1 — Docker (Recommended)
 
+**1. Clone the repo**
 ```bash
-# 1. Clone the repo
 git clone https://github.com/robayedl/documind.git
 cd documind
+```
 
-# 2. Set your API key
+**2. Set your API key**
+```bash
 cp .env.example .env
 # Edit .env and add: GOOGLE_API_KEY=your_key_here
+```
 
-# 3. Launch everything
+**3. Launch everything**
+```bash
 docker compose up --build
 ```
 
@@ -115,28 +119,37 @@ docker compose up --build
 
 ### Option 2 — Local Development
 
-**Prerequisites:** Python 3.12, pip
-
+**1. Clone & enter directory**
 ```bash
-# 1. Clone & enter directory
 git clone https://github.com/robayedl/documind.git
 cd documind
+```
 
-# 2. Create virtual environment
+**2. Create virtual environment**
+```bash
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+source .venv/bin/activate
+```
+> Windows: `.venv\Scripts\activate`
 
-# 3. Install dependencies
+**3. Install dependencies**
+```bash
 pip install -r requirements.txt
+```
 
-# 4. Configure environment
+**4. Configure environment**
+```bash
 cp .env.example .env
 # Edit .env and set GOOGLE_API_KEY
+```
 
-# 5. Start backend (terminal 1)
+**5. Start backend** _(terminal 1)_
+```bash
 uvicorn app.main:app --reload --port 8000
+```
 
-# 6. Start UI (terminal 2)
+**6. Start UI** _(terminal 2)_
+```bash
 streamlit run ui/streamlit_app.py --server.port 8501
 ```
 
@@ -155,20 +168,26 @@ streamlit run ui/streamlit_app.py --server.port 8501
 
 ### Example: Upload and query a PDF
 
+**Upload**
 ```bash
-# Upload
 DOC_ID=$(curl -s -F "file=@document.pdf" http://localhost:8000/documents \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['doc_id'])")
+```
 
-# Index
+**Index**
+```bash
 curl -s -X POST http://localhost:8000/documents/$DOC_ID/index
+```
 
-# Query (full response)
+**Query (full response)**
+```bash
 curl -s -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d "{\"doc_id\": \"$DOC_ID\", \"question\": \"What is this document about?\"}"
+```
 
-# Query (streaming)
+**Query (streaming)**
+```bash
 curl -N -X POST http://localhost:8000/query/stream \
   -H "Content-Type: application/json" \
   -d "{\"doc_id\": \"$DOC_ID\", \"question\": \"Summarize the key points.\"}"
@@ -190,36 +209,85 @@ curl -N -X POST http://localhost:8000/query/stream \
 
 ## Running Tests
 
+**Run full test suite**
 ```bash
-# Run full test suite
 pytest -q
+```
 
-# Run with coverage
+**Run with coverage**
+```bash
 pytest --cov=rag --cov=app -q
+```
 
-# Lint
+**Lint**
+```bash
 ruff check .
 ```
 
 ---
 
-## RAGAS Evaluation
+## Evaluation
 
-Evaluate pipeline quality with [RAGAS](https://docs.ragas.io) metrics: faithfulness, answer relevancy, context precision, and context recall.
+DocuMind ships with a 30-question golden dataset built from **"Attention Is All You Need"** (Vaswani et al., 2017) and an automated [RAGAS](https://docs.ragas.io) evaluation runner that uses **Gemini 2.5 Flash** as the judge model.
 
+### Latest Evaluation Results
+
+<!-- EVAL-RESULTS-START -->
+| Metric | Score | |
+|---|---|---|
+| `faithfulness` | 0.848 | ████████████████ |
+| `answer_relevancy` | 0.681 | █████████████ |
+| `context_precision` | 0.803 | ████████████████ |
+| `context_recall` | 0.750 | ███████████████ |
+
+_Evaluated on 30 questions · 2026-05-05 · full results in [`eval/results/latest.json`](eval/results/latest.json)_
+<!-- EVAL-RESULTS-END -->
+
+### Metrics
+
+| Metric | What it measures |
+|---|---|
+| `faithfulness` | Are all claims in the answer grounded in the retrieved context? |
+| `answer_relevancy` | Is the answer actually relevant to the question? |
+| `context_precision` | Are the most relevant chunks ranked highest? |
+| `context_recall` | Does the context cover everything needed to answer the question? |
+
+### Running the evaluation
+
+**1. Start the server, upload, and index the PDF** _(server only needed for this step)_
 ```bash
-# 1. Upload and index your PDF (see API section above)
+uvicorn app.main:app --reload --port 8000
+```
+```bash
+DOC_ID=$(curl -s -F "file=@attention.pdf" http://localhost:8000/documents \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['doc_id'])")
+curl -s -X POST http://localhost:8000/documents/$DOC_ID/index
+```
+> Once indexed, the server can be stopped — `make eval` calls the pipeline directly.
 
-# 2. Update eval/test_queries.json with your doc_id and ground truth answers
+**2. Run full evaluation**
+```bash
+DOC_ID=$DOC_ID make eval
+```
+> ~10–15 min · ~$0.05–$0.15 in Gemini API calls (30 questions × ~5 LLM calls each for pipeline + RAGAS scoring)
 
-# 3. Run evaluation
-python eval/run_eval.py --doc-id <your_doc_id>
-
-# 4. View results
-cat eval/results.json
+**Quick smoke-test** _(5 questions)_
+```bash
+python eval/run.py --doc-id $DOC_ID --limit 5
 ```
 
-**Pass criteria:** `faithfulness ≥ 0.70` and `answer_relevancy ≥ 0.70`
+**Filter by category**
+```bash
+python eval/run.py --doc-id $DOC_ID --category factual
+```
+
+After each run the scores above are automatically updated in this file. To refresh them from the latest result without re-running evaluation:
+
+```bash
+make update-readme
+```
+
+See [eval/EVALUATION_GUIDE.md](eval/EVALUATION_GUIDE.md) for dataset format, how to add entries, and cost estimates.
 
 ---
 
@@ -255,9 +323,10 @@ documind/
 │       └── pdf_viewer.py    # Inline PDF viewer
 │
 ├── eval/
-│   ├── test_queries.json    # Sample Q&A pairs for evaluation
-│   ├── ragas_eval.py        # RAGAS metric computation
-│   └── run_eval.py          # CLI runner + results table
+│   ├── golden.jsonl         # 30-question golden dataset (Attention Is All You Need)
+│   ├── run.py               # RAGAS runner — per-question table, JSON output, README update
+│   ├── results/             # Per-run result JSONs (<UTC-timestamp>.json)
+│   └── EVALUATION_GUIDE.md  # Dataset format, field definitions, usage, cost estimates
 │
 ├── tests/
 │   ├── test_agent.py        # Agent node + graph integration tests
@@ -267,6 +336,7 @@ documind/
 ├── .github/workflows/ci.yml # CI: lint + test on push/PR
 ├── Dockerfile               # Python 3.12 slim image
 ├── docker-compose.yml       # Multi-service: api + streamlit
+├── Makefile                 # run / ui / test / lint / eval targets
 └── requirements.txt
 ```
 
