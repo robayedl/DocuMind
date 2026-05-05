@@ -37,7 +37,8 @@ def generate(state: GraphState) -> GraphState:
     except Exception as e:
         logger.error(f"Generator failed, falling back to raw chunks: {e}")
         raw = "\n\n".join(
-            doc.page_content[:300] for doc in state.get("documents", [])
+            (doc.metadata.get("original_content") or doc.page_content)[:300]
+            for doc in state.get("documents", [])
         )
         fallback = (
             f"Answer generation failed due to an API error. "

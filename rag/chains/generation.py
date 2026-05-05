@@ -32,10 +32,15 @@ _PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
+def _doc_text(doc: Document) -> str:
+    """Return the original chunk text, ignoring any prepended retrieval context."""
+    return doc.metadata.get("original_content") or doc.page_content
+
+
 def _format_inputs(inputs: dict) -> dict:
     """Convert Document list to a plain string and pass through chat history."""
     docs: List[Document] = inputs["context"]
-    formatted = "\n\n".join(doc.page_content for doc in docs)
+    formatted = "\n\n".join(_doc_text(doc) for doc in docs)
     return {
         "context": formatted,
         "input": inputs["input"],
