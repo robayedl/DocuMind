@@ -11,6 +11,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from rag.chains.retrieval import save_bm25
+from rag.contextualize import contextualize_chunk
 from rag.store import DEFAULT_COLLECTION, add_documents
 
 _SPLITTER = RecursiveCharacterTextSplitter(
@@ -53,12 +54,19 @@ def extract_pages(pdf_path: Path) -> List[Tuple[int, str]]:
     return pages
 
 
+def _use_contextual_retrieval() -> bool:
+    return os.getenv("CONTEXTUAL_RETRIEVAL", "").lower() in ("1", "true", "yes")
+
+
 def index_document(doc_id: str) -> Tuple[int, str]:
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path.exists():
         raise FileNotFoundError(str(pdf_path))
 
     pages = extract_pages(pdf_path)
+
+    contextual = _use_contextual_retrieval()
+    full_doc_text = "\n\n".join(text for _, text in pages) if contextual else ""
 
     all_docs: List[Document] = []
     source_name = pdf_path.name
@@ -70,15 +78,24 @@ def index_document(doc_id: str) -> Tuple[int, str]:
             if not c.strip():
                 continue
             ref = f"{doc_id}_p{page_idx}_c{chunk_id}"
+
+            if contextual:
+                context_sentence = contextualize_chunk(full_doc_text, c)
+                embed_text = f"{context_sentence} {c}"
+            else:
+                embed_text = c
+
             all_docs.append(
                 Document(
-                    page_content=c,
+                    page_content=embed_text,
                     metadata={
                         "doc_id": doc_id,
                         "ref": ref,
                         "page": page_idx,
                         "chunk_id": chunk_id,
                         "source": source_name,
+                        # Preserve original chunk so citations never expose the prepended context.
+                        "original_content": c,
                     },
                 )
             )

@@ -235,10 +235,10 @@ DocuMind ships with a 30-question golden dataset built from **"Attention Is All 
 <!-- EVAL-RESULTS-START -->
 | Metric | Score | |
 |---|---|---|
-| `faithfulness` | 0.848 | ████████████████ |
-| `answer_relevancy` | 0.681 | █████████████ |
-| `context_precision` | 0.803 | ████████████████ |
-| `context_recall` | 0.750 | ███████████████ |
+| `faithfulness` | 0.879 | █████████████████ |
+| `answer_relevancy` | 0.706 | ██████████████ |
+| `context_precision` | 0.872 | █████████████████ |
+| `context_recall` | 0.883 | █████████████████ |
 
 _Evaluated on 30 questions · 2026-05-05 · full results in [`eval/results/latest.json`](eval/results/latest.json)_
 <!-- EVAL-RESULTS-END -->
