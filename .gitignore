@@ -32,10 +32,9 @@ data/
 *.log
 logs/
 
-# Evaluation output
-eval/results.json
-eval/report.json
-eval/report.md
+# Evaluation output — timestamped runs stay local; latest.json is committed
+eval/results/[0-9]*.json
+eval/__pycache__/
 
 # Credentials & keys
 *.pem
@@ -45,3 +44,4 @@ eval/report.md
 
 # Test artifacts
 testfile.pdf
+attention.pdf
