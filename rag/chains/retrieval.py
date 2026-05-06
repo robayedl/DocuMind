@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 import pickle
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -7,7 +9,9 @@ from typing import List, Optional, Tuple
 from langchain_core.documents import Document
 from rank_bm25 import BM25Okapi
 
-from rag.store import get_chroma_dir, similarity_search
+from rag.store import get_chroma_dir, similarity_search, similarity_search_by_vector
+
+logger = logging.getLogger(__name__)
 
 RRF_K = 60  # standard RRF constant
 
@@ -39,44 +43,72 @@ def _rrf_score(rank: int) -> float:
     return 1.0 / (RRF_K + rank + 1)
 
 
-def hybrid_search(doc_id: str, query: str, k: int = 10) -> List[Document]:
-    """
-    Combine vector search and BM25 keyword search using Reciprocal Rank Fusion.
+def _rrf_merge(
+    list_a: List[Document], list_b: List[Document], k: int
+) -> List[Document]:
+    """Merge two ranked document lists using Reciprocal Rank Fusion."""
+    rrf_scores: dict[str, float] = {}
+    for rank, doc in enumerate(list_a):
+        ref = doc.metadata["ref"]
+        rrf_scores[ref] = rrf_scores.get(ref, 0.0) + _rrf_score(rank)
+    for rank, doc in enumerate(list_b):
+        ref = doc.metadata["ref"]
+        rrf_scores[ref] = rrf_scores.get(ref, 0.0) + _rrf_score(rank)
 
-    RRF score = sum of 1/(k + rank) across both ranked lists.
-    Falls back to pure vector search if no BM25 index exists.
-    """
-    # ── Vector search ──────────────────────────────────────────────
+    all_docs: dict[str, Document] = {
+        doc.metadata["ref"]: doc for doc in list_a + list_b
+    }
+    sorted_refs = sorted(rrf_scores, key=lambda r: rrf_scores[r], reverse=True)
+    return [all_docs[ref] for ref in sorted_refs[:k]]
+
+
+def hybrid_search(doc_id: str, query: str, k: int = 10) -> List[Document]:
+    """BM25 + vector search fused with RRF. Falls back to pure vector if no BM25 index."""
     vector_results: List[Document] = similarity_search(doc_id, query, k=k)
 
-    # ── BM25 search ────────────────────────────────────────────────
     bm25_data = load_bm25(doc_id)
     if bm25_data is None:
         return vector_results
 
     bm25, corpus_docs = bm25_data
-    tokenized_query = query.lower().split()
-    scores = bm25.get_scores(tokenized_query)
-
+    scores = bm25.get_scores(query.lower().split())
     top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
     bm25_results: List[Document] = [corpus_docs[i] for i in top_indices]
 
-    # ── Reciprocal Rank Fusion ──────────────────────────────────────
-    rrf_scores: dict[str, float] = {}
+    return _rrf_merge(vector_results, bm25_results, k=k)
 
-    for rank, doc in enumerate(vector_results):
-        ref = doc.metadata["ref"]
-        rrf_scores[ref] = rrf_scores.get(ref, 0.0) + _rrf_score(rank)
 
-    for rank, doc in enumerate(bm25_results):
-        ref = doc.metadata["ref"]
-        rrf_scores[ref] = rrf_scores.get(ref, 0.0) + _rrf_score(rank)
+def _hyde_dense_search(doc_id: str, query: str, k: int) -> List[Document]:
+    from rag.llm import get_embeddings, get_llm
 
-    # Collect all unique docs and sort by combined RRF score
-    all_docs: dict[str, Document] = {
-        doc.metadata["ref"]: doc
-        for doc in vector_results + bm25_results
-    }
-    sorted_refs = sorted(rrf_scores, key=lambda r: rrf_scores[r], reverse=True)
+    hypothetical = get_llm().invoke(
+        f"Write a hypothetical 3-sentence passage that directly answers: {query}"
+    ).content.strip()
+    logger.info("[HyDE] hypothetical: %r", hypothetical[:120])
+    return similarity_search_by_vector(doc_id, get_embeddings().embed_query(hypothetical), k=k)
 
-    return [all_docs[ref] for ref in sorted_refs[:k]]
+
+def retrieve_with_hyde(doc_id: str, query: str, top_k: int = 5) -> tuple[List[Document], bool]:
+    """Hybrid search + reranking. Triggers HyDE when top reranker score < HYDE_THRESHOLD.
+
+    Returns (docs, hyde_triggered).
+    """
+    from rag.chains.rerank import rerank_with_score
+
+    hyde_threshold = float(os.getenv("HYDE_THRESHOLD", "0.3"))
+    candidate_k = top_k * 2
+
+    candidates = hybrid_search(doc_id, query, k=candidate_k)
+    if not candidates:
+        return [], False
+
+    docs, top_score = rerank_with_score(query, candidates, top_k=top_k)
+
+    if top_score < hyde_threshold:
+        logger.info("[HyDE] score=%.3f < %.3f, triggering for: %r", top_score, hyde_threshold, query)
+        hyde_candidates = _hyde_dense_search(doc_id, query, k=candidate_k)
+        merged = _rrf_merge(candidates, hyde_candidates, k=candidate_k)
+        docs, _ = rerank_with_score(query, merged, top_k=top_k)
+        return docs, True
+
+    return docs, False

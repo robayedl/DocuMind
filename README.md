@@ -23,12 +23,14 @@ https://github.com/user-attachments/assets/290e7caf-6676-43c2-9f9f-9df63d28c3f9
 | **Agentic RAG** | LangGraph pipeline with routing, grading, rewriting, and hallucination checking |
 | **Hybrid Search** | BM25 + semantic vector search fused with Reciprocal Rank Fusion (RRF) |
 | **Cross-Encoder Reranking** | `ms-marco-MiniLM-L-6-v2` reranker for high-precision results |
+| **Semantic Cache** | Redis vector cache — repeated or near-identical queries return instantly without re-running the pipeline |
+| **HyDE Fallback** | Hypothetical Document Embeddings: on low reranker confidence, Gemini generates a hypothetical answer passage and re-runs dense retrieval with it |
 | **Gemini 2.5 Flash** | Google's fastest frontier LLM for low-latency answers |
 | **Streaming Responses** | Server-Sent Events (SSE) for real-time token-by-token output |
 | **Conversation Memory** | Per-session chat history maintained across turns |
 | **RAGAS Evaluation** | Faithfulness, answer relevancy, context precision & recall |
 | **Streamlit Chat UI** | Dark-theme UI with PDF viewer, SSE streaming, and source citations |
-| **Docker Ready** | Full multi-service docker-compose setup (API + UI) |
+| **Docker Ready** | Full multi-service docker-compose setup (API + UI + Redis) |
 | **AWS EC2 Deployment** | Production-ready for cloud deployment |
 
 ---
@@ -64,7 +66,14 @@ flowchart TD
 ```
 Query ──► BM25 Sparse Search  ─┐
                                 ├──► RRF Fusion ──► Cross-Encoder Rerank ──► Top-K Chunks
-Query ──► Vector Dense Search ─┘
+Query ──► Vector Dense Search ─┘                          │
+                                              score < HYDE_THRESHOLD?
+                                                          │ yes
+                                              Gemini generates hypothetical passage
+                                                          │
+                                              Dense search with hypothetical embedding
+                                                          │
+                                              RRF merge + Re-rank ──► Top-K Chunks
 ```
 
 ---
@@ -80,6 +89,8 @@ Query ──► Vector Dense Search ─┘
 | **Vector Store** | ChromaDB 0.5 |
 | **Sparse Search** | BM25 (`rank-bm25`) |
 | **Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| **Semantic Cache** | Redis Stack (RediSearch vector index, cosine similarity, 24 h TTL) |
+| **HyDE** | Gemini Flash hypothetical passage → dense re-retrieval (conditional) |
 | **PDF Parsing** | pdfplumber + Unicode normalization |
 | **Chunking** | RecursiveCharacterTextSplitter (800 tokens, 100 overlap) |
 | **UI** | Streamlit (dark theme, SSE streaming, PDF viewer) |
@@ -204,6 +215,10 @@ curl -N -X POST http://localhost:8000/query/stream \
 | `CHROMA_DIR` | `./chroma_db` | ChromaDB persistence directory |
 | `CORS_ORIGINS` | `http://localhost:8501` | Comma-separated allowed origins |
 | `BACKEND_URL` | `http://localhost:8000` | Backend URL for Streamlit UI |
+| `REDIS_URL` | `redis://localhost:6379` | Redis Stack connection URL for semantic cache |
+| `SEMANTIC_CACHE_THRESHOLD` | `0.97` | Cosine similarity threshold for a cache hit (0–1) |
+| `CACHE_TTL_SECONDS` | `86400` | Cache entry TTL in seconds (default: 24 h) |
+| `HYDE_THRESHOLD` | `0.3` | Reranker score below which HyDE is triggered |
 
 ---
 
@@ -302,6 +317,7 @@ documind/
 ├── rag/
 │   ├── agents/
 │   │   ├── graph.py         # LangGraph StateGraph — full pipeline
+│   │   ├── state.py         # GraphState TypedDict shared across all nodes
 │   │   ├── router.py        # Query router (retrieve vs. direct)
 │   │   ├── grader.py        # Document relevance grader
 │   │   ├── generator.py     # Answer generator (Gemini + chat history)
@@ -309,8 +325,11 @@ documind/
 │   │   ├── rewriter.py      # Query rewriter for retry loop
 │   │   └── memory.py        # Per-session conversation memory
 │   ├── chains/
-│   │   ├── retrieval.py     # Hybrid search + RRF fusion
-│   │   └── rerank.py        # Cross-encoder reranker
+│   │   ├── retrieval.py     # Hybrid search + RRF fusion + HyDE fallback
+│   │   ├── rerank.py        # Cross-encoder reranker
+│   │   └── generation.py    # RAG prompt + LLM chain
+│   ├── cache.py             # Redis semantic cache (vector similarity lookup)
+│   ├── contextualize.py     # Contextual retrieval — prepends chunk context before embedding
 │   ├── ingest.py            # PDF parsing (pdfplumber), chunking, indexing
 │   ├── llm.py               # Gemini LLM + HuggingFace embeddings
 │   └── store.py             # ChromaDB interface (collection versioning)
@@ -330,13 +349,17 @@ documind/
 │
 ├── tests/
 │   ├── test_agent.py        # Agent node + graph integration tests
-│   └── test_llm_pipeline.py # LLM init + embeddings tests
+│   ├── test_cache_hyde.py   # Semantic cache + HyDE retrieval tests
+│   ├── test_health.py       # Health endpoint tests
+│   ├── test_llm_pipeline.py # LLM init + embeddings tests
+│   ├── test_query.py        # Query endpoint tests
+│   └── test_upload.py       # Upload endpoint tests
 │
 ├── .env.example             # Environment variable template
 ├── .github/workflows/ci.yml # CI: lint + test on push/PR
 ├── Dockerfile               # Python 3.12 slim image
-├── docker-compose.yml       # Multi-service: api + streamlit
-├── Makefile                 # run / ui / test / lint / eval targets
+├── docker-compose.yml       # Multi-service: api + streamlit + Redis
+├── Makefile                 # run / ui / test / lint / eval / update-readme targets
 └── requirements.txt
 ```
 

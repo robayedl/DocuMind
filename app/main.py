@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from langchain_core.documents import Document
 
 from rag.agents.graph import run_agent
+from rag import cache as semantic_cache
 from rag.ingest import index_document
 from rag.llm import get_embeddings, get_llm
 from app.storage import new_doc_id, pdf_path
@@ -89,6 +90,8 @@ class QueryResponse(BaseModel):
     retrieved: int
     retries: int
     latency_ms: float
+    from_cache: bool = False
+    hyde_triggered: bool = False
 
 
 # ==============================
@@ -151,6 +154,30 @@ def query(req: QueryRequest) -> QueryResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
 
+    cached = semantic_cache.lookup(req.question)
+    if cached:
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+        raw_citations = cached.get("citations", [])
+        citations = [
+            Citation(
+                ref=c.get("ref", ""),
+                page=c.get("page", -1),
+                chunk_id=c.get("chunk_id", -1),
+                source=c.get("source", ""),
+            )
+            for c in raw_citations
+        ]
+        return QueryResponse(
+            doc_id=req.doc_id,
+            question=req.question,
+            answer=cached["answer"],
+            citations=citations,
+            retrieved=len(citations),
+            retries=0,
+            latency_ms=round(latency_ms, 2),
+            from_cache=True,
+        )
+
     state = run_agent(
         question=req.question,
         doc_id=req.doc_id,
@@ -176,6 +203,13 @@ def query(req: QueryRequest) -> QueryResponse:
 
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
+    if answer:
+        semantic_cache.store(
+            req.question,
+            answer,
+            [c.model_dump() for c in citations],
+        )
+
     return QueryResponse(
         doc_id=req.doc_id,
         question=req.question,
@@ -184,6 +218,7 @@ def query(req: QueryRequest) -> QueryResponse:
         retrieved=len(docs),
         retries=state.get("retry_count", 0),
         latency_ms=round(latency_ms, 2),
+        hyde_triggered=state.get("hyde_triggered", False),
     )
 
 
@@ -202,6 +237,19 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
     async def event_stream() -> AsyncIterator[str]:
         try:
             import asyncio
+
+            cached = semantic_cache.lookup(req.question)
+            if cached:
+                yield _sse("status", "Cache hit — returning cached answer…")
+                answer: str = cached["answer"]
+                words = answer.split(" ")
+                for i, word in enumerate(words):
+                    token = word if i == 0 else " " + word
+                    yield _sse("token", token)
+                    await asyncio.sleep(0.008)
+                yield _sse("citations", json.dumps(cached.get("citations", [])))
+                yield _sse("done", "")
+                return
 
             _STATUS_STEPS = [
                 "Routing your question…",
@@ -234,7 +282,7 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
 
             state = await future
 
-            answer: str = state.get("generation", "")
+            answer = state.get("generation", "")
             docs: List[Document] = state.get("documents", [])
 
             if not answer and not docs:
@@ -252,7 +300,7 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
                 yield _sse("token", token)
                 await asyncio.sleep(0.018)
 
-            citations = [
+            citations_data = [
                 {
                     "ref": d.metadata.get("ref", ""),
                     "page": d.metadata.get("page", -1),
@@ -262,8 +310,12 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
                 }
                 for d in docs
             ]
-            yield _sse("citations", json.dumps(citations))
+            yield _sse("citations", json.dumps(citations_data))
+            yield _sse("meta", json.dumps({"hyde_triggered": state.get("hyde_triggered", False)}))
             yield _sse("done", "")
+
+            if answer:
+                semantic_cache.store(req.question, answer, citations_data)
 
         except Exception as e:
             yield _sse("error", str(e))

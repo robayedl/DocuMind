@@ -12,8 +12,7 @@ from rag.agents.hallucination import check_hallucination
 from rag.agents.router import route_query
 from rag.agents.rewriter import rewrite_query
 from rag.agents.state import GraphState
-from rag.chains.retrieval import hybrid_search
-from rag.chains.rerank import rerank
+from rag.chains.retrieval import retrieve_with_hyde
 
 logger = logging.getLogger(__name__)
 
@@ -25,29 +24,22 @@ MAX_RETRIES = 3
 # ──────────────────────────────────────────────
 
 def retrieve(state: GraphState) -> GraphState:
-    """Hybrid search (vector + BM25 + RRF) followed by cross-encoder reranking."""
+    """Hybrid search + reranking with HyDE fallback on low-confidence results."""
     try:
-        # Fetch a wider candidate set for reranking
-        candidates = hybrid_search(
-            doc_id=state["doc_id"],
-            query=state["question"],
-            k=10,
-        )
-        # On the first attempt, empty results mean the doc is not indexed
-        if not candidates and state["retry_count"] == 0:
+        docs, hyde_triggered = retrieve_with_hyde(doc_id=state["doc_id"], query=state["question"])
+        if not docs and state["retry_count"] == 0:
             return {
                 "documents": [],
+                "hyde_triggered": False,
                 "error": (
                     "No documents have been indexed for this document. "
                     "Please index the document first."
                 ),
             }
-        # Cross-encoder reranking — keep top 5
-        docs = rerank(state["question"], candidates, top_k=5)
-        return {"documents": docs}
+        return {"documents": docs, "hyde_triggered": hyde_triggered}
     except Exception as e:
         logger.error(f"Retrieve failed: {e}")
-        return {"documents": [], "error": str(e)}
+        return {"documents": [], "hyde_triggered": False, "error": str(e)}
 
 
 def direct_response(state: GraphState) -> GraphState:
@@ -166,5 +158,6 @@ def run_agent(question: str, doc_id: str, session_id: str = "") -> GraphState:
             "grounded": False,
             "error": "",
             "session_id": session_id,
+            "hyde_triggered": False,
         }
     )

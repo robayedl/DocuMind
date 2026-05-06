@@ -16,3 +16,4 @@ class GraphState(TypedDict):
     grounded: bool             # whether the generation is supported by documents
     error: str                 # set when a node fails or doc is not indexed
     session_id: str            # for conversation memory (empty string = no memory)
+    hyde_triggered: bool       # whether HyDE fired during retrieval
