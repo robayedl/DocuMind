@@ -28,3 +28,20 @@ def rerank(query: str, documents: List[Document], top_k: int = 5) -> List[Docume
 
     scored = sorted(zip(scores, documents), key=lambda x: x[0], reverse=True)
     return [doc for _, doc in scored[:top_k]]
+
+
+def rerank_with_score(
+    query: str, documents: List[Document], top_k: int = 5
+) -> tuple[List[Document], float]:
+    """Rerank and return (top_k docs, top reranker score). Score is 0.0 if no documents."""
+    if not documents:
+        return [], 0.0
+
+    cross_encoder = _get_cross_encoder()
+    pairs = [[query, doc.page_content] for doc in documents]
+    scores = cross_encoder.predict(pairs)
+
+    scored = sorted(zip(scores, documents), key=lambda x: x[0], reverse=True)
+    top_docs = [doc for _, doc in scored[:top_k]]
+    top_score = float(scored[0][0])
+    return top_docs, top_score
