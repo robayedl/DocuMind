@@ -24,6 +24,7 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./chroma_db:/app/chroma_db
+      - ./data:/app/data
     depends_on:
       redis:
         condition: service_healthy

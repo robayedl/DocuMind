@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import sys
 import warnings
@@ -126,7 +127,7 @@ def _compute_ragas(
         raw = result[m.name]
         if isinstance(raw, list):
             per_metric_lists[m.name] = raw
-            valid = [v for v in raw if v is not None]
+            valid = [v for v in raw if v is not None and not (isinstance(v, float) and math.isnan(v))]
             means[m.name] = round(sum(valid) / len(valid), 4) if valid else 0.0
         elif raw is None:
             per_metric_lists[m.name] = [None] * len(samples)
@@ -171,8 +172,11 @@ def _print_means_table(means: dict[str, float]) -> None:
     print("\n  Aggregate means:")
     print("  " + "─" * 36)
     for metric, score in means.items():
-        bar = "█" * int(score * 20)
-        print(f"  {metric:<24}  {score:.3f}  {bar}")
+        if math.isnan(score):
+            print(f"  {metric:<24}   N/A")
+        else:
+            bar = "█" * int(score * 20)
+            print(f"  {metric:<24}  {score:.3f}  {bar}")
     print("  " + "─" * 36)
 
 
@@ -259,6 +263,8 @@ def update_readme_from_results(
 
     rows = "\n".join(
         f"| `{metric}` | {score:.3f} | {'█' * int(score * 20)} |"
+        if not math.isnan(score)
+        else f"| `{metric}` | N/A | |"
         for metric, score in means.items()
     )
     block = (

@@ -58,12 +58,7 @@ def fallback(state: GraphState) -> GraphState:
     error = state.get("error", "")
     if error:
         return {"generation": error}
-    return {
-        "generation": (
-            "I could not find a reliable answer in the document after multiple attempts. "
-            "Please try rephrasing your question or check that the document has been indexed."
-        )
-    }
+    return {"generation": "I do not know based on the provided document."}
 
 
 # ──────────────────────────────────────────────

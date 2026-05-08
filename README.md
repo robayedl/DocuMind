@@ -28,52 +28,77 @@ https://github.com/user-attachments/assets/290e7caf-6676-43c2-9f9f-9df63d28c3f9
 | **Gemini 2.5 Flash** | Google's fastest frontier LLM for low-latency answers |
 | **Streaming Responses** | Server-Sent Events (SSE) for real-time token-by-token output |
 | **Conversation Memory** | Per-session chat history maintained across turns |
+| **Rich PDF Parsing** | Table extraction (Markdown) and figure captioning via Gemini 2.5 Flash (multimodal) |
 | **RAGAS Evaluation** | Faithfulness, answer relevancy, context precision & recall |
 | **Streamlit Chat UI** | Dark-theme UI with PDF viewer, SSE streaming, and source citations |
 | **Docker Ready** | Full multi-service docker-compose setup (API + UI + Redis) |
-| **AWS EC2 Deployment** | Production-ready for cloud deployment |
+
+---
+
+## Supported Document Types
+
+| Type | How it's handled | Chunk tag |
+|---|---|---|
+| Text PDF | `unstructured` hi_res — body text split at 800 tokens | `element_type: text` |
+| Tables | Converted to Markdown pipe-tables, kept as one chunk | `element_type: table` |
+| Figures | Captioned by Gemini 2.5 Flash (`EXTRACT_FIGURES=true`, max 30/doc) | `element_type: figure` |
+
+> **Note:** `hi_res` parsing requires `tesseract` and `poppler`. Both are included in the Docker image. For local development, install with `brew install tesseract poppler` (macOS) or `apt-get install tesseract-ocr poppler-utils` (Linux).
 
 ---
 
 ## Architecture
 
+**Query Pipeline**
+
 ```mermaid
 flowchart TD
-    Q([User Question]) --> R[Router]
+    Q([User Question]) --> SC{Semantic Cache?}
 
-    R -->|direct| DA[Direct Answer]
+    SC -->|hit| CR([Return Cached Response])
+    SC -->|miss| RT[Router]
+
+    RT -->|greeting| DA[Direct Response]
     DA --> E1([END])
 
-    R -->|retrieve| RET[Retrieve]
-    RET --> GD[Grade Docs]
+    RT -->|document question| RET[Hybrid Retrieval\nBM25 + Vector + RRF]
+    RET --> RR[Cross-Encoder Rerank]
+    RR --> HY{Score < HyDE\nThreshold?}
 
-    GD -->|relevant docs| GEN[Generate]
-    GD -->|no docs · retry < 3| RW[Rewrite Query]
-    GD -->|no docs · max retries| FB[Fallback]
+    HY -->|yes| HD[HyDE: Generate\nHypothetical Passage]
+    HD --> RE2[Re-retrieve + RRF merge]
+    RE2 --> RR2[Re-rank]
+    RR2 --> GD
 
+    HY -->|no| GD[Grade Documents]
+
+    GD -->|relevant| GEN[Generate Answer\nGemini 2.5 Flash]
+    GD -->|none · retry < 3| RW[Rewrite Query]
+    GD -->|none · max retries| FB[Fallback]
     RW --> RET
 
     GEN --> HC[Hallucination Check]
-
-    HC -->|grounded| RESP([Final Response + Citations])
+    HC -->|grounded| STORE[Store in Cache]
+    STORE --> RESP([Response + Citations])
     HC -->|not grounded · retry < 3| GEN
     HC -->|max retries| FB
-
     FB --> E2([END])
 ```
 
-**Retrieval Pipeline:**
-```
-Query ──► BM25 Sparse Search  ─┐
-                                ├──► RRF Fusion ──► Cross-Encoder Rerank ──► Top-K Chunks
-Query ──► Vector Dense Search ─┘                          │
-                                              score < HYDE_THRESHOLD?
-                                                          │ yes
-                                              Gemini generates hypothetical passage
-                                                          │
-                                              Dense search with hypothetical embedding
-                                                          │
-                                              RRF merge + Re-rank ──► Top-K Chunks
+**Ingestion Pipeline**
+
+```mermaid
+flowchart LR
+    PDF([PDF]) --> UP[unstructured\nhi_res]
+    UP --> T[Tables → Markdown\nchunk]
+    UP --> F[Figures → Gemini\nVision caption]
+    UP --> TX[Text → 800-token\nchunks]
+    T & F & TX --> CR{Contextual\nRetrieval?}
+    CR -->|yes| CTX[Gemini prepends\ncontext sentence]
+    CR -->|no| EMB
+    CTX --> EMB[Embed\nall-mpnet-base-v2]
+    EMB --> VEC[(ChromaDB\nVector Store)]
+    EMB --> BM[(BM25\nIndex)]
 ```
 
 ---
@@ -91,7 +116,9 @@ Query ──► Vector Dense Search ─┘                          │
 | **Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
 | **Semantic Cache** | Redis Stack (RediSearch vector index, cosine similarity, 24 h TTL) |
 | **HyDE** | Gemini Flash hypothetical passage → dense re-retrieval (conditional) |
-| **PDF Parsing** | pdfplumber + Unicode normalization |
+| **PDF Parsing** | unstructured (hi_res strategy, table & figure extraction) |
+| **Figure Captioning** | Gemini 2.5 Flash multimodal (optional, `EXTRACT_FIGURES=true`) |
+| **Table Extraction** | unstructured + markdownify (HTML→Markdown) |
 | **Chunking** | RecursiveCharacterTextSplitter (800 tokens, 100 overlap) |
 | **UI** | Streamlit (dark theme, SSE streaming, PDF viewer) |
 | **Evaluation** | RAGAS (faithfulness, answer relevancy, context precision/recall) |
@@ -136,30 +163,39 @@ git clone https://github.com/robayedl/documind.git
 cd documind
 ```
 
-**2. Create virtual environment**
+**2. Install system dependencies** _(required for PDF parsing)_
+```bash
+# macOS
+brew install tesseract poppler
+
+# Linux
+apt-get install tesseract-ocr poppler-utils
+```
+
+**3. Create virtual environment**
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 > Windows: `.venv\Scripts\activate`
 
-**3. Install dependencies**
+**4. Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-**4. Configure environment**
+**5. Configure environment**
 ```bash
 cp .env.example .env
 # Edit .env and set GOOGLE_API_KEY
 ```
 
-**5. Start backend** _(terminal 1)_
+**6. Start backend** _(terminal 1)_
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-**6. Start UI** _(terminal 2)_
+**7. Start UI** _(terminal 2)_
 ```bash
 streamlit run ui/streamlit_app.py --server.port 8501
 ```
@@ -177,33 +213,6 @@ streamlit run ui/streamlit_app.py --server.port 8501
 | `POST` | `/query` | Ask a question, get a full JSON response |
 | `POST` | `/query/stream` | Ask a question, receive SSE streaming tokens |
 
-### Example: Upload and query a PDF
-
-**Upload**
-```bash
-DOC_ID=$(curl -s -F "file=@document.pdf" http://localhost:8000/documents \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['doc_id'])")
-```
-
-**Index**
-```bash
-curl -s -X POST http://localhost:8000/documents/$DOC_ID/index
-```
-
-**Query (full response)**
-```bash
-curl -s -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d "{\"doc_id\": \"$DOC_ID\", \"question\": \"What is this document about?\"}"
-```
-
-**Query (streaming)**
-```bash
-curl -N -X POST http://localhost:8000/query/stream \
-  -H "Content-Type: application/json" \
-  -d "{\"doc_id\": \"$DOC_ID\", \"question\": \"Summarize the key points.\"}"
-```
-
 ---
 
 ## Environment Variables
@@ -219,6 +228,8 @@ curl -N -X POST http://localhost:8000/query/stream \
 | `SEMANTIC_CACHE_THRESHOLD` | `0.97` | Cosine similarity threshold for a cache hit (0–1) |
 | `CACHE_TTL_SECONDS` | `86400` | Cache entry TTL in seconds (default: 24 h) |
 | `HYDE_THRESHOLD` | `0.3` | Reranker score below which HyDE is triggered |
+| `EXTRACT_FIGURES` | `true` | Extract and caption figures with Gemini 2.5 Flash (multimodal) (capped at 30/doc) |
+| `CONTEXTUAL_RETRIEVAL` | `true` | Prepend per-chunk context sentences before embedding |
 
 ---
 
@@ -227,11 +238,6 @@ curl -N -X POST http://localhost:8000/query/stream \
 **Run full test suite**
 ```bash
 pytest -q
-```
-
-**Run with coverage**
-```bash
-pytest --cov=rag --cov=app -q
 ```
 
 **Lint**
@@ -250,12 +256,12 @@ DocuMind ships with a 30-question golden dataset built from **"Attention Is All 
 <!-- EVAL-RESULTS-START -->
 | Metric | Score | |
 |---|---|---|
-| `faithfulness` | 0.879 | █████████████████ |
-| `answer_relevancy` | 0.706 | ██████████████ |
-| `context_precision` | 0.872 | █████████████████ |
-| `context_recall` | 0.883 | █████████████████ |
+| `faithfulness` | 0.974 | ███████████████████ |
+| `answer_relevancy` | 0.764 | ███████████████ |
+| `context_precision` | 0.917 | ██████████████████ |
+| `context_recall` | 0.833 | ████████████████ |
 
-_Evaluated on 30 questions · 2026-05-05 · full results in [`eval/results/latest.json`](eval/results/latest.json)_
+_Evaluated on 30 questions · 2026-05-08 · full results in [`eval/results/latest.json`](eval/results/latest.json)_
 <!-- EVAL-RESULTS-END -->
 
 ### Metrics
@@ -330,7 +336,7 @@ documind/
 │   │   └── generation.py    # RAG prompt + LLM chain
 │   ├── cache.py             # Redis semantic cache (vector similarity lookup)
 │   ├── contextualize.py     # Contextual retrieval — prepends chunk context before embedding
-│   ├── ingest.py            # PDF parsing (pdfplumber), chunking, indexing
+│   ├── ingest.py            # PDF parsing (unstructured), table & figure ingestion
 │   ├── llm.py               # Gemini LLM + HuggingFace embeddings
 │   └── store.py             # ChromaDB interface (collection versioning)
 │
@@ -348,9 +354,12 @@ documind/
 │   └── EVALUATION_GUIDE.md  # Dataset format, field definitions, usage, cost estimates
 │
 ├── tests/
+│   ├── fixtures/
+│   │   └── elements.py      # Fake unstructured element factories for ingest tests
 │   ├── test_agent.py        # Agent node + graph integration tests
 │   ├── test_cache_hyde.py   # Semantic cache + HyDE retrieval tests
 │   ├── test_health.py       # Health endpoint tests
+│   ├── test_ingest.py       # Table extraction and figure captioning tests
 │   ├── test_llm_pipeline.py # LLM init + embeddings tests
 │   ├── test_query.py        # Query endpoint tests
 │   └── test_upload.py       # Upload endpoint tests

@@ -199,7 +199,11 @@ def test_full_pipeline_end_to_end(tmp_path, monkeypatch):
     pdf_dir.mkdir(parents=True)
     (pdf_dir / f"{doc_id}.pdf").write_bytes(b"placeholder")
 
-    with patch("rag.ingest.extract_pages", return_value=[(1, "Python is a programming language.")]):
+    from unstructured.documents.elements import NarrativeText
+    from types import SimpleNamespace
+    _el = NarrativeText(text="Python is a programming language.")
+    _el.metadata = SimpleNamespace(page_number=1)
+    with patch("rag.ingest.extract_elements", return_value=[_el]):
         from rag.ingest import index_document
         index_document(doc_id)
 

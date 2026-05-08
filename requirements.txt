@@ -15,7 +15,8 @@ httpx==0.28.1
 ruff==0.9.6
 
 # PDF processing
-pdfplumber>=0.11.0
+unstructured[pdf]>=0.15.0
+markdownify>=0.13.0
 
 # Vector store
 chromadb==0.5.23

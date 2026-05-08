@@ -16,9 +16,13 @@ _HALLUCINATION_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             "You are a factual grounding checker. Given source documents and a generated answer, "
-            "decide if every claim in the answer is fully supported by the documents.\n"
-            "Answer 'yes' if the answer is grounded in the documents.\n"
-            "Answer 'no' if any part of the answer contains information not present in the documents.",
+            "decide if the substantive factual claims in the answer are supported by the documents.\n"
+            "Focus on names, numbers, descriptions, and conclusions — not on metadata like figure "
+            "numbers or table labels that the user mentioned in their question.\n"
+            "Answer 'yes' if the answer's factual content is grounded in the documents, or if "
+            "the answer is a refusal ('I do not know').\n"
+            "Answer 'no' only if the answer asserts specific facts that contradict or are absent "
+            "from the documents.",
         ),
         (
             "human",

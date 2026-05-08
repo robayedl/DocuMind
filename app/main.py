@@ -1,7 +1,15 @@
 from __future__ import annotations
 
-import json
+import logging
 import os
+import warnings
+
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
+logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
+logging.getLogger("unstructured").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore", message=".*max_size.*", category=FutureWarning)
+
+import json
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, List, Optional
@@ -22,12 +30,11 @@ from rag.ingest import index_document
 from rag.llm import get_embeddings, get_llm
 from app.storage import new_doc_id, pdf_path
 
-APP_ENV = os.getenv("APP_ENV", "local")
+APP_ENV = os.getenv("ENVIRONMENT", "local")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Pre-load the embedding model and LLM client at startup to avoid cold-start latency."""
     get_embeddings()
     try:
         get_llm()
@@ -46,10 +53,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ==============================
-# Response / Request Models
-# ==============================
 
 class HealthResponse(BaseModel):
     status: str = "ok"
@@ -70,7 +73,7 @@ class IndexResponse(BaseModel):
 
 class QueryRequest(BaseModel):
     doc_id: str = Field(..., min_length=1)
-    question: str = Field(..., min_length=2)  # IMPORTANT (test requires 422 for short question)
+    question: str = Field(..., min_length=2)
     top_k: int = Field(5, ge=1, le=20)
     session_id: Optional[str] = Field(None, description="Optional session ID for conversation memory")
 
@@ -93,10 +96,6 @@ class QueryResponse(BaseModel):
     from_cache: bool = False
     hyde_triggered: bool = False
 
-
-# ==============================
-# Routes
-# ==============================
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
@@ -123,7 +122,6 @@ def upload_document(file: UploadFile = File(...)) -> UploadResponse:
 
 @app.post("/documents/{doc_id}/index", response_model=IndexResponse)
 def index(doc_id: str) -> IndexResponse:
-    # 404 if document does not exist
     path = pdf_path(doc_id)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
@@ -149,7 +147,6 @@ def get_document_file(doc_id: str) -> FileResponse:
 def query(req: QueryRequest) -> QueryResponse:
     t0 = time.perf_counter()
 
-    # 404 if document does not exist
     path = pdf_path(req.doc_id)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
@@ -187,7 +184,6 @@ def query(req: QueryRequest) -> QueryResponse:
     answer = state.get("generation", "")
     docs: List[Document] = state.get("documents", [])
 
-    # If no answer was generated and no documents were found, doc likely not indexed
     if not answer and not docs:
         raise HTTPException(status_code=404, detail="Document not indexed.")
 
