@@ -12,5 +12,6 @@ __pycache__
 
 storage
 chroma_db
+data
 
 .DS_Store

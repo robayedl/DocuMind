@@ -96,7 +96,7 @@ def retrieve_with_hyde(doc_id: str, query: str, top_k: int = 5) -> tuple[List[Do
     from rag.chains.rerank import rerank_with_score
 
     hyde_threshold = float(os.getenv("HYDE_THRESHOLD", "0.3"))
-    candidate_k = top_k * 2
+    candidate_k = top_k * 4
 
     candidates = hybrid_search(doc_id, query, k=candidate_k)
     if not candidates:

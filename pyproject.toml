@@ -13,7 +13,7 @@ requires-python = ">=3.12"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 filterwarnings = [
-    "ignore::pydantic.warnings.PydanticDeprecatedSince211:chromadb.*",
+    "ignore::DeprecationWarning:chromadb.*",
 ]
 
 [tool.ruff]

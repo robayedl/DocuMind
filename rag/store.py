@@ -19,7 +19,7 @@ def get_chroma_dir() -> str:
     return os.getenv("CHROMA_DIR", "chroma_db")
 
 
-def get_vectorstore(doc_id: str | None = None) -> Chroma:
+def get_vectorstore() -> Chroma:
     chroma_dir = get_chroma_dir()
     Path(chroma_dir).mkdir(parents=True, exist_ok=True)
     return Chroma(
@@ -29,6 +29,14 @@ def get_vectorstore(doc_id: str | None = None) -> Chroma:
         collection_metadata={"hnsw:space": "cosine"},
         client_settings=Settings(anonymized_telemetry=False),
     )
+
+
+def clear_document(doc_id: str) -> None:
+    vs = get_vectorstore()
+    try:
+        vs._collection.delete(where={"doc_id": doc_id})
+    except Exception:
+        pass
 
 
 def add_documents(doc_id: str, documents: List[Document]) -> None:

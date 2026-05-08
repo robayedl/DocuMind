@@ -16,7 +16,11 @@ _SYSTEM_PROMPT = (
     "Rules:\n"
     "- Answer ONLY using information present in the context below.\n"
     "- Cite the relevant parts of the context by quoting or referencing them directly.\n"
-    "- If the context does not contain enough information to answer the question, "
+    "- When the context contains labels, names, or terms that directly address the "
+    "substance of the question, use them to answer. Do not refuse just because a "
+    "secondary detail (e.g. exact figure number, table position) is not explicitly "
+    "confirmed — answer from what IS in the context.\n"
+    "- If the context genuinely contains no information relevant to the question, "
     "respond with: 'I do not know based on the provided document.'\n"
     "- Do not speculate or add information beyond what is in the context.\n"
     "- Respond in plain text only. Do not use markdown, bullet points, bold, or any special formatting.\n\n"
@@ -33,8 +37,7 @@ _PROMPT = ChatPromptTemplate.from_messages(
 
 
 def _doc_text(doc: Document) -> str:
-    """Return the original chunk text, ignoring any prepended retrieval context."""
-    return doc.metadata.get("original_content") or doc.page_content
+    return doc.page_content
 
 
 def _format_inputs(inputs: dict) -> dict:
