@@ -2,11 +2,12 @@
 redis>=5.0.0
 
 # Web framework
-fastapi==0.115.6
+fastapi>=0.115.6
+starlette>=0.46.0
 uvicorn[standard]==0.32.1
 python-multipart==0.0.12
 pydantic-settings==2.7.0
-python-dotenv
+python-dotenv>=1.0.0
 
 # Dev / testing
 pytest==8.3.4
@@ -14,30 +15,30 @@ httpx==0.28.1
 ruff==0.9.6
 
 # PDF processing
-pdfplumber
+pdfplumber>=0.11.0
 
 # Vector store
 chromadb==0.5.23
 
 # Embeddings & models
 sentence-transformers==3.3.1
-torch
+torch>=2.0.0
 onnxruntime>=1.17.0
 
 # LangChain ecosystem
-langchain
-langchain-google-genai
-langchain-huggingface
-langchain-chroma
-langchain-text-splitters
-rank-bm25
-google-genai
-langgraph
+langchain>=0.3.0
+langchain-google-genai>=2.0.0
+langchain-huggingface>=0.1.0
+langchain-chroma>=0.1.4
+langchain-text-splitters>=0.3.0
+rank-bm25>=0.2.2
+google-genai>=1.0.0
+langgraph>=0.2.0
 
 # UI
-streamlit
-watchdog
+streamlit>=1.32.0
+watchdog>=4.0.0
 
 # Evaluation
 ragas>=0.2.0
-datasets
+datasets>=2.0.0
