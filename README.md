@@ -181,7 +181,7 @@ make ui    # UI on :8501
 | `GOOGLE_API_KEY` | — | **Required.** Google AI Studio API key |
 | `STORAGE_DIR` | `./storage` | Directory for uploaded PDFs |
 | `CHROMA_DIR` | `./chroma_db` | ChromaDB persistence directory |
-| `CORS_ORIGINS` | `http://localhost:8501` | Comma-separated allowed origins |
+| `CORS_ORIGINS` | `http://localhost:8501` | Comma-separated list of allowed origins (default: Streamlit UI) |
 | `BACKEND_URL` | `http://localhost:8000` | Backend URL for Streamlit UI |
 | `REDIS_URL` | `redis://localhost:6379` | Redis Stack connection URL |
 | `SEMANTIC_CACHE_THRESHOLD` | `0.97` | Cosine similarity threshold for cache hit (0–1) |
