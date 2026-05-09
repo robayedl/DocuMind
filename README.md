@@ -23,27 +23,13 @@ https://github.com/user-attachments/assets/290e7caf-6676-43c2-9f9f-9df63d28c3f9
 | **Agentic RAG** | LangGraph pipeline with routing, grading, rewriting, and hallucination checking |
 | **Hybrid Search** | BM25 + semantic vector search fused with Reciprocal Rank Fusion (RRF) |
 | **Cross-Encoder Reranking** | `ms-marco-MiniLM-L-6-v2` reranker for high-precision results |
-| **Semantic Cache** | Redis vector cache — repeated or near-identical queries return instantly without re-running the pipeline |
-| **HyDE Fallback** | Hypothetical Document Embeddings: on low reranker confidence, Gemini generates a hypothetical answer passage and re-runs dense retrieval with it |
+| **Semantic Cache** | Redis vector cache — repeated or near-identical queries return instantly |
+| **HyDE Fallback** | On low reranker confidence, generates a hypothetical passage and re-retrieves |
 | **Gemini 2.5 Flash** | Google's fastest frontier LLM for low-latency answers |
 | **Streaming Responses** | Server-Sent Events (SSE) for real-time token-by-token output |
 | **Conversation Memory** | Per-session chat history maintained across turns |
-| **Rich PDF Parsing** | Table extraction (Markdown) and figure captioning via Gemini 2.5 Flash (multimodal) |
+| **Rich PDF Parsing** | Table extraction (Markdown) and figure captioning via Gemini multimodal |
 | **RAGAS Evaluation** | Faithfulness, answer relevancy, context precision & recall |
-| **Streamlit Chat UI** | Dark-theme UI with PDF viewer, SSE streaming, and source citations |
-| **Docker Ready** | Full multi-service docker-compose setup (API + UI + Redis) |
-
----
-
-## Supported Document Types
-
-| Type | How it's handled | Chunk tag |
-|---|---|---|
-| Text PDF | `unstructured` hi_res — body text split at 800 tokens | `element_type: text` |
-| Tables | Converted to Markdown pipe-tables, kept as one chunk | `element_type: table` |
-| Figures | Captioned by Gemini 2.5 Flash (`EXTRACT_FIGURES=true`, max 30/doc) | `element_type: figure` |
-
-> **Note:** `hi_res` parsing requires `tesseract` and `poppler`. Both are included in the Docker image. For local development, install with `brew install tesseract poppler` (macOS) or `apt-get install tesseract-ocr poppler-utils` (Linux).
 
 ---
 
@@ -107,24 +93,16 @@ flowchart LR
 
 | Layer | Technology |
 |---|---|
-| **API** | FastAPI 0.115, Uvicorn, Server-Sent Events |
-| **Agent Framework** | LangGraph (StateGraph), LangChain |
-| **LLM** | Google Gemini 2.5 Flash (`langchain-google-genai`) |
-| **Embeddings** | HuggingFace `all-mpnet-base-v2` (768-dim) |
-| **Vector Store** | ChromaDB 0.5 |
-| **Sparse Search** | BM25 (`rank-bm25`) |
-| **Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| **Semantic Cache** | Redis Stack (RediSearch vector index, cosine similarity, 24 h TTL) |
-| **HyDE** | Gemini Flash hypothetical passage → dense re-retrieval (conditional) |
-| **PDF Parsing** | unstructured (hi_res strategy, table & figure extraction) |
-| **Figure Captioning** | Gemini 2.5 Flash multimodal (optional, `EXTRACT_FIGURES=true`) |
-| **Table Extraction** | unstructured + markdownify (HTML→Markdown) |
-| **Chunking** | RecursiveCharacterTextSplitter (800 tokens, 100 overlap) |
-| **UI** | Streamlit (dark theme, SSE streaming, PDF viewer) |
-| **Evaluation** | RAGAS (faithfulness, answer relevancy, context precision/recall) |
-| **Testing** | pytest + ruff |
-| **CI/CD** | GitHub Actions |
-| **Container** | Docker + docker-compose |
+| **API** | FastAPI, Uvicorn, Server-Sent Events |
+| **Agent** | LangGraph, LangChain |
+| **LLM** | Google Gemini 2.5 Flash |
+| **Embeddings & Reranking** | HuggingFace `all-mpnet-base-v2`, `ms-marco-MiniLM-L-6-v2` |
+| **Vector Store** | ChromaDB + BM25 (hybrid) |
+| **Cache** | Redis Stack (vector similarity) |
+| **PDF Parsing** | unstructured (hi_res), Gemini 2.5 Flash multimodal |
+| **UI** | Streamlit |
+| **Evaluation** | RAGAS |
+| **CI/CD** | GitHub Actions, Docker |
 
 ---
 
@@ -132,85 +110,66 @@ flowchart LR
 
 ### Option 1 — Docker (Recommended)
 
-**1. Clone the repo**
 ```bash
 git clone https://github.com/robayedl/documind.git
 cd documind
 ```
 
-**2. Set your API key**
 ```bash
-cp .env.example .env
-# Edit .env and add: GOOGLE_API_KEY=your_key_here
+cp .env.example .env   # add GOOGLE_API_KEY
 ```
 
-**3. Launch everything**
 ```bash
 docker compose up --build
 ```
 
-- **UI:** [http://localhost:8501](http://localhost:8501)
-- **API:** [http://localhost:8000](http://localhost:8000)
-- **API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+| Service | URL |
+|---|---|
+| UI | http://localhost:8501 |
+| API | http://localhost:8000 |
+| API Docs | http://localhost:8000/docs |
 
----
+### Option 2 — Local
 
-### Option 2 — Local Development
-
-**1. Clone & enter directory**
 ```bash
 git clone https://github.com/robayedl/documind.git
 cd documind
 ```
 
-**2. Install system dependencies** _(required for PDF parsing)_
 ```bash
-# macOS
-brew install tesseract poppler
-
-# Linux
-apt-get install tesseract-ocr poppler-utils
+# required for PDF parsing
+# macOS: brew install tesseract poppler
+# Linux: apt-get install tesseract-ocr poppler-utils
 ```
 
-**3. Create virtual environment**
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-> Windows: `.venv\Scripts\activate`
-
-**4. Install dependencies**
-```bash
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**5. Configure environment**
 ```bash
-cp .env.example .env
-# Edit .env and set GOOGLE_API_KEY
+cp .env.example .env   # add GOOGLE_API_KEY
 ```
 
-**6. Start backend** _(terminal 1)_
 ```bash
-uvicorn app.main:app --reload --port 8000
+make run   # API on :8000
 ```
 
-**7. Start UI** _(terminal 2)_
 ```bash
-streamlit run ui/streamlit_app.py --server.port 8501
+make ui    # UI on :8501
 ```
 
 ---
 
-## API Documentation
+## API
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Health check — returns status and environment |
-| `POST` | `/documents` | Upload a PDF file, returns `doc_id` |
+| `GET` | `/health` | Health check |
+| `POST` | `/documents` | Upload a PDF, returns `doc_id` |
 | `POST` | `/documents/{doc_id}/index` | Parse, chunk, and index a document |
 | `GET` | `/documents/{doc_id}/file` | Download the original PDF |
-| `POST` | `/query` | Ask a question, get a full JSON response |
+| `POST` | `/query` | Ask a question, get a JSON response |
 | `POST` | `/query/stream` | Ask a question, receive SSE streaming tokens |
 
 ---
@@ -224,34 +183,18 @@ streamlit run ui/streamlit_app.py --server.port 8501
 | `CHROMA_DIR` | `./chroma_db` | ChromaDB persistence directory |
 | `CORS_ORIGINS` | `http://localhost:8501` | Comma-separated allowed origins |
 | `BACKEND_URL` | `http://localhost:8000` | Backend URL for Streamlit UI |
-| `REDIS_URL` | `redis://localhost:6379` | Redis Stack connection URL for semantic cache |
-| `SEMANTIC_CACHE_THRESHOLD` | `0.97` | Cosine similarity threshold for a cache hit (0–1) |
-| `CACHE_TTL_SECONDS` | `86400` | Cache entry TTL in seconds (default: 24 h) |
+| `REDIS_URL` | `redis://localhost:6379` | Redis Stack connection URL |
+| `SEMANTIC_CACHE_THRESHOLD` | `0.97` | Cosine similarity threshold for cache hit (0–1) |
+| `CACHE_TTL_SECONDS` | `86400` | Cache TTL in seconds (default: 24 h) |
 | `HYDE_THRESHOLD` | `0.3` | Reranker score below which HyDE is triggered |
-| `EXTRACT_FIGURES` | `true` | Extract and caption figures with Gemini 2.5 Flash (multimodal) (capped at 30/doc) |
-| `CONTEXTUAL_RETRIEVAL` | `true` | Prepend per-chunk context sentences before embedding |
-
----
-
-## Running Tests
-
-**Run full test suite**
-```bash
-pytest -q
-```
-
-**Lint**
-```bash
-ruff check .
-```
+| `EXTRACT_FIGURES` | `true` | Caption figures with Gemini 2.5 Flash multimodal (max 30/doc) |
+| `CONTEXTUAL_RETRIEVAL` | `true` | Prepend per-chunk context before embedding |
 
 ---
 
 ## Evaluation
 
-DocuMind ships with a 30-question golden dataset built from **"Attention Is All You Need"** (Vaswani et al., 2017) and an automated [RAGAS](https://docs.ragas.io) evaluation runner that uses **Gemini 2.5 Flash** as the judge model.
-
-### Latest Evaluation Results
+Results on a 30-question golden dataset built from **"Attention Is All You Need"** (Vaswani et al., 2017), scored by Gemini 2.5 Flash via [RAGAS](https://docs.ragas.io).
 
 <!-- EVAL-RESULTS-START -->
 | Metric | Score | |
@@ -264,51 +207,17 @@ DocuMind ships with a 30-question golden dataset built from **"Attention Is All 
 _Evaluated on 30 questions · 2026-05-08 · full results in [`eval/results/latest.json`](eval/results/latest.json)_
 <!-- EVAL-RESULTS-END -->
 
-### Metrics
-
-| Metric | What it measures |
-|---|---|
-| `faithfulness` | Are all claims in the answer grounded in the retrieved context? |
-| `answer_relevancy` | Is the answer actually relevant to the question? |
-| `context_precision` | Are the most relevant chunks ranked highest? |
-| `context_recall` | Does the context cover everything needed to answer the question? |
-
-### Running the evaluation
-
-**1. Start the server, upload, and index the PDF** _(server only needed for this step)_
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-```bash
-DOC_ID=$(curl -s -F "file=@attention.pdf" http://localhost:8000/documents \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['doc_id'])")
-curl -s -X POST http://localhost:8000/documents/$DOC_ID/index
-```
-> Once indexed, the server can be stopped — `make eval` calls the pipeline directly.
-
-**2. Run full evaluation**
-```bash
-DOC_ID=$DOC_ID make eval
-```
-> ~10–15 min · ~$0.05–$0.15 in Gemini API calls (30 questions × ~5 LLM calls each for pipeline + RAGAS scoring)
-
-**Quick smoke-test** _(5 questions)_
-```bash
-python eval/run.py --doc-id $DOC_ID --limit 5
-```
-
-**Filter by category**
-```bash
-python eval/run.py --doc-id $DOC_ID --category factual
-```
-
-After each run the scores above are automatically updated in this file. To refresh them from the latest result without re-running evaluation:
+> Upload and index the PDF first (via the UI or API), then run evaluation with the returned `doc_id`.
 
 ```bash
-make update-readme
+DOC_ID=<your_doc_id> make eval   # full run (~10 min)
 ```
 
-See [eval/EVALUATION_GUIDE.md](eval/EVALUATION_GUIDE.md) for dataset format, how to add entries, and cost estimates.
+```bash
+make update-readme               # refresh scores without re-running
+```
+
+See [eval/EVALUATION_GUIDE.md](eval/EVALUATION_GUIDE.md) for dataset format and cost estimates.
 
 ---
 
@@ -316,60 +225,27 @@ See [eval/EVALUATION_GUIDE.md](eval/EVALUATION_GUIDE.md) for dataset format, how
 
 ```
 documind/
-├── app/
-│   ├── main.py              # FastAPI app — all routes + SSE streaming
-│   └── storage.py           # doc_id generation, file path helpers
-│
+├── app/          # FastAPI routes and storage helpers
 ├── rag/
-│   ├── agents/
-│   │   ├── graph.py         # LangGraph StateGraph — full pipeline
-│   │   ├── state.py         # GraphState TypedDict shared across all nodes
-│   │   ├── router.py        # Query router (retrieve vs. direct)
-│   │   ├── grader.py        # Document relevance grader
-│   │   ├── generator.py     # Answer generator (Gemini + chat history)
-│   │   ├── hallucination.py # Groundedness checker
-│   │   ├── rewriter.py      # Query rewriter for retry loop
-│   │   └── memory.py        # Per-session conversation memory
-│   ├── chains/
-│   │   ├── retrieval.py     # Hybrid search + RRF fusion + HyDE fallback
-│   │   ├── rerank.py        # Cross-encoder reranker
-│   │   └── generation.py    # RAG prompt + LLM chain
-│   ├── cache.py             # Redis semantic cache (vector similarity lookup)
-│   ├── contextualize.py     # Contextual retrieval — prepends chunk context before embedding
-│   ├── ingest.py            # PDF parsing (unstructured), table & figure ingestion
-│   ├── llm.py               # Gemini LLM + HuggingFace embeddings
-│   └── store.py             # ChromaDB interface (collection versioning)
-│
-├── ui/
-│   ├── streamlit_app.py     # Main Streamlit entrypoint
-│   └── components/
-│       ├── chat.py          # Chat interface + SSE streaming
-│       ├── sidebar.py       # Upload, index, document management
-│       └── pdf_viewer.py    # Inline PDF viewer
-│
-├── eval/
-│   ├── golden.jsonl         # 30-question golden dataset (Attention Is All You Need)
-│   ├── run.py               # RAGAS runner — per-question table, JSON output, README update
-│   ├── results/             # Per-run result JSONs (<UTC-timestamp>.json)
-│   └── EVALUATION_GUIDE.md  # Dataset format, field definitions, usage, cost estimates
-│
-├── tests/
-│   ├── fixtures/
-│   │   └── elements.py      # Fake unstructured element factories for ingest tests
-│   ├── test_agent.py        # Agent node + graph integration tests
-│   ├── test_cache_hyde.py   # Semantic cache + HyDE retrieval tests
-│   ├── test_health.py       # Health endpoint tests
-│   ├── test_ingest.py       # Table extraction and figure captioning tests
-│   ├── test_llm_pipeline.py # LLM init + embeddings tests
-│   ├── test_query.py        # Query endpoint tests
-│   └── test_upload.py       # Upload endpoint tests
-│
-├── .env.example             # Environment variable template
-├── .github/workflows/ci.yml # CI: lint + test on push/PR
-├── Dockerfile               # Python 3.12 slim image
-├── docker-compose.yml       # Multi-service: api + streamlit + Redis
-├── Makefile                 # run / ui / test / lint / eval / update-readme targets
-└── requirements.txt
+│   ├── agents/   # LangGraph nodes: router, grader, generator, hallucination, rewriter
+│   ├── chains/   # Retrieval (hybrid + HyDE), reranking, generation chains
+│   ├── cache.py  # Redis semantic cache
+│   └── ingest.py # PDF parsing — text, tables, figures
+├── ui/           # Streamlit app and components
+├── eval/         # RAGAS runner and golden dataset
+└── tests/
+```
+
+---
+
+## Tests
+
+```bash
+make test
+```
+
+```bash
+make lint
 ```
 
 ---
