@@ -28,7 +28,10 @@ from rag.agents.graph import run_agent
 from rag import cache as semantic_cache
 from rag.ingest import index_document
 from rag.llm import get_embeddings, get_llm
-from app.storage import new_doc_id, pdf_path
+import shutil
+from pathlib import Path
+from app.storage import delete_document, list_docs, mark_doc_indexed, new_doc_id, pdf_path, save_document_record
+from rag.store import clear_document, get_chroma_dir
 
 APP_ENV = os.getenv("ENVIRONMENT", "local")
 
@@ -45,7 +48,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="DocuMind", lifespan=lifespan)
 
-_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8501").split(",")
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -97,6 +100,19 @@ class QueryResponse(BaseModel):
     hyde_triggered: bool = False
 
 
+class DocRecord(BaseModel):
+    doc_id: str
+    filename: str
+    uploaded_at: str
+    indexed: bool
+    index_time_s: Optional[float] = None
+
+
+@app.get("/documents", response_model=List[DocRecord])
+def list_documents() -> List[DocRecord]:
+    return [DocRecord(**d) for d in list_docs()]
+
+
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse()
@@ -112,6 +128,7 @@ def upload_document(file: UploadFile = File(...)) -> UploadResponse:
 
     content = file.file.read()
     out_path.write_bytes(content)
+    save_document_record(doc_id, file.filename)
 
     return UploadResponse(
         doc_id=doc_id,
@@ -126,13 +143,74 @@ def index(doc_id: str) -> IndexResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
 
+    t0 = time.perf_counter()
     chunks_indexed, collection_name = index_document(doc_id)
+    index_time_s = time.perf_counter() - t0
+    mark_doc_indexed(doc_id, index_time_s=index_time_s)
 
     return IndexResponse(
         doc_id=doc_id,
         chunks_indexed=chunks_indexed,
         collection=collection_name,
     )
+
+
+@app.delete("/documents/{doc_id}", status_code=204)
+def delete_doc(doc_id: str) -> None:
+    path = pdf_path(doc_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Document not found.")
+    delete_document(doc_id)
+    clear_document(doc_id)
+    bm25_path = Path(get_chroma_dir()) / f"bm25_{doc_id}.pkl"
+    if bm25_path.exists():
+        bm25_path.unlink()
+    figures_dir = Path("data") / "figures" / doc_id
+    if figures_dir.exists():
+        shutil.rmtree(figures_dir)
+
+
+@app.post("/documents/{doc_id}/index/stream")
+async def index_stream(doc_id: str) -> StreamingResponse:
+    path = pdf_path(doc_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    async def event_stream() -> AsyncIterator[str]:
+        import asyncio
+
+        queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+        loop = asyncio.get_event_loop()
+
+        def on_progress(msg: str) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, ("status", msg))
+
+        t0 = time.perf_counter()
+        future = loop.run_in_executor(None, lambda: index_document(doc_id, on_progress))
+        yield _sse("status", "Starting…")
+
+        while not future.done():
+            try:
+                event, data = await asyncio.wait_for(queue.get(), timeout=0.5)
+                yield _sse(event, data)
+            except asyncio.TimeoutError:
+                pass
+
+        while not queue.empty():
+            event, data = queue.get_nowait()
+            yield _sse(event, data)
+
+        try:
+            chunks_indexed, _ = await future
+        except Exception as e:
+            yield _sse("error", str(e))
+            return
+
+        index_time_s = time.perf_counter() - t0
+        mark_doc_indexed(doc_id, index_time_s=index_time_s)
+        yield _sse("done", json.dumps({"chunks": chunks_indexed, "index_time_s": round(index_time_s, 1)}))
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.get("/documents/{doc_id}/file")
@@ -151,7 +229,7 @@ def query(req: QueryRequest) -> QueryResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
 
-    cached = semantic_cache.lookup(req.question)
+    cached = semantic_cache.lookup(req.question, req.doc_id)
     if cached:
         latency_ms = (time.perf_counter() - t0) * 1000.0
         raw_citations = cached.get("citations", [])
@@ -202,6 +280,7 @@ def query(req: QueryRequest) -> QueryResponse:
     if answer:
         semantic_cache.store(
             req.question,
+            req.doc_id,
             answer,
             [c.model_dump() for c in citations],
         )
@@ -234,7 +313,7 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
         try:
             import asyncio
 
-            cached = semantic_cache.lookup(req.question)
+            cached = semantic_cache.lookup(req.question, req.doc_id)
             if cached:
                 yield _sse("status", "Cache hit — returning cached answer…")
                 answer: str = cached["answer"]
@@ -242,39 +321,37 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
                 for i, word in enumerate(words):
                     token = word if i == 0 else " " + word
                     yield _sse("token", token)
-                    await asyncio.sleep(0.008)
+                    await asyncio.sleep(0.005)
                 yield _sse("citations", json.dumps(cached.get("citations", [])))
                 yield _sse("done", "")
                 return
 
-            _STATUS_STEPS = [
-                "Routing your question…",
-                "Searching the document…",
-                "Reading relevant sections…",
-                "Grading document quality…",
-                "Generating answer…",
-                "Checking for accuracy…",
-            ]
-
             loop = asyncio.get_event_loop()
+            queue: asyncio.Queue[str] = asyncio.Queue()
+
+            def on_step(label: str) -> None:
+                loop.call_soon_threadsafe(queue.put_nowait, label)
+
             future = loop.run_in_executor(
                 None,
                 lambda: run_agent(
                     question=req.question,
                     doc_id=req.doc_id,
                     session_id=req.session_id or "",
+                    on_step=on_step,
                 ),
             )
 
-            # Emit status messages every 2.5 s while the agent runs
-            step = 0
-            yield _sse("status", _STATUS_STEPS[step])
-            step += 1
+            # Drain real step labels from the queue while the agent runs
             while not future.done():
-                await asyncio.sleep(2.5)
-                if not future.done() and step < len(_STATUS_STEPS):
-                    yield _sse("status", _STATUS_STEPS[step])
-                    step += 1
+                try:
+                    label = await asyncio.wait_for(queue.get(), timeout=0.3)
+                    yield _sse("status", label)
+                except asyncio.TimeoutError:
+                    pass
+            # Drain any remaining steps that arrived after future completed
+            while not queue.empty():
+                yield _sse("status", queue.get_nowait())
 
             state = await future
 
@@ -289,12 +366,12 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
                 yield _sse("error", "Could not generate an answer. Try rephrasing your question.")
                 return
 
-            # Stream the answer word by word so tokens appear progressively
+            # Stream the answer word by word
             words = answer.split(" ")
             for i, word in enumerate(words):
                 token = word if i == 0 else " " + word
                 yield _sse("token", token)
-                await asyncio.sleep(0.018)
+                await asyncio.sleep(0.005)
 
             citations_data = [
                 {
@@ -311,7 +388,7 @@ async def query_stream(req: StreamQueryRequest) -> StreamingResponse:
             yield _sse("done", "")
 
             if answer:
-                semantic_cache.store(req.question, answer, citations_data)
+                semantic_cache.store(req.question, req.doc_id, answer, citations_data)
 
         except Exception as e:
             yield _sse("error", str(e))

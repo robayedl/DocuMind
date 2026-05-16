@@ -45,14 +45,14 @@ def test_cache_lookup_graceful_when_redis_down():
     from rag import cache
 
     with patch("rag.cache._get_client", side_effect=ConnectionError("Redis down")):
-        assert cache.lookup("any query") is None
+        assert cache.lookup("any query", "doc-1") is None
 
 
 def test_cache_store_graceful_when_redis_down():
     from rag import cache
 
     with patch("rag.cache._get_client", side_effect=ConnectionError("Redis down")):
-        cache.store("q", "answer", [])  # must not raise
+        cache.store("q", "doc-1", "answer", [])  # must not raise
 
 
 def test_cache_lookup_returns_none_on_empty_results():
@@ -64,7 +64,7 @@ def test_cache_lookup_returns_none_on_empty_results():
 
     with patch("rag.cache._get_client", return_value=mock_client), \
          patch("rag.cache._embed", return_value=[0.0] * 768):
-        assert cache.lookup("unknown query") is None
+        assert cache.lookup("unknown query", "doc-1") is None
 
 
 def test_cache_lookup_hit_above_threshold():
@@ -83,7 +83,7 @@ def test_cache_lookup_hit_above_threshold():
     with patch("rag.cache._get_client", return_value=mock_client), \
          patch("rag.cache._embed", return_value=[0.0] * 768), \
          patch.dict("os.environ", {"SEMANTIC_CACHE_THRESHOLD": "0.97"}):
-        result = cache.lookup("what is attention?")
+        result = cache.lookup("what is attention?", "doc-1")
 
     assert result is not None
     assert result["answer"] == "cached answer"
@@ -103,7 +103,26 @@ def test_cache_lookup_miss_below_threshold():
     with patch("rag.cache._get_client", return_value=mock_client), \
          patch("rag.cache._embed", return_value=[0.0] * 768), \
          patch.dict("os.environ", {"SEMANTIC_CACHE_THRESHOLD": "0.97"}):
-        assert cache.lookup("something different") is None
+        assert cache.lookup("something different", "doc-1") is None
+
+
+def test_cache_lookup_is_scoped_by_doc_id():
+    from rag import cache
+
+    # Redis returns no docs when the doc_id tag filter matches nothing
+    mock_client = MagicMock()
+    mock_client.ft.return_value.info.return_value = {}
+    mock_client.ft.return_value.search.return_value = MagicMock(docs=[])
+
+    with patch("rag.cache._get_client", return_value=mock_client), \
+         patch("rag.cache._embed", return_value=[0.0] * 768):
+        result = cache.lookup("same question as doc-a", "doc-b")
+
+    # Verify the query string includes the doc_id tag filter
+    call_args = mock_client.ft.return_value.search.call_args
+    query_obj = call_args[0][0]
+    assert "doc\\-b" in query_obj.query_string()  # UUID dashes are escaped in tag filter
+    assert result is None
 
 
 # ── retrieve_with_hyde ────────────────────────────────────────────────────────

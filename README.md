@@ -5,6 +5,7 @@
 [![CI](https://github.com/robayedl/documind/actions/workflows/ci.yml/badge.svg)](https://github.com/robayedl/documind/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
+![Next.js](https://img.shields.io/badge/Next.js-16-orange)
 ![LangGraph](https://img.shields.io/badge/LangGraph-agentic-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -100,7 +101,7 @@ flowchart LR
 | **Vector Store** | ChromaDB + BM25 (hybrid) |
 | **Cache** | Redis Stack (vector similarity) |
 | **PDF Parsing** | unstructured (hi_res), Gemini 2.5 Flash multimodal |
-| **UI** | Streamlit |
+| **Frontend** | Next.js 16 (App Router), shadcn/ui, Tailwind CSS — UI designed with Claude Code |
 | **Evaluation** | RAGAS |
 | **CI/CD** | GitHub Actions, Docker |
 
@@ -123,9 +124,11 @@ cp .env.example .env   # add GOOGLE_API_KEY
 docker compose up --build
 ```
 
+> The first build downloads ML models and may take a few minutes. The `web` service waits for the API to be healthy before starting.
+
 | Service | URL |
 |---|---|
-| UI | http://localhost:8501 |
+| UI | http://localhost:3000 |
 | API | http://localhost:8000 |
 | API Docs | http://localhost:8000/docs |
 
@@ -156,7 +159,10 @@ make run   # API on :8000
 ```
 
 ```bash
-make ui    # UI on :8501
+cd web
+cp .env.local.example .env.local
+npm install
+npm run dev   # UI on :3000
 ```
 
 ---
@@ -166,6 +172,7 @@ make ui    # UI on :8501
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/health` | Health check |
+| `GET` | `/documents` | List all uploaded documents |
 | `POST` | `/documents` | Upload a PDF, returns `doc_id` |
 | `POST` | `/documents/{doc_id}/index` | Parse, chunk, and index a document |
 | `GET` | `/documents/{doc_id}/file` | Download the original PDF |
@@ -181,8 +188,8 @@ make ui    # UI on :8501
 | `GOOGLE_API_KEY` | — | **Required.** Google AI Studio API key |
 | `STORAGE_DIR` | `./storage` | Directory for uploaded PDFs |
 | `CHROMA_DIR` | `./chroma_db` | ChromaDB persistence directory |
-| `CORS_ORIGINS` | `http://localhost:8501` | Comma-separated list of allowed origins (default: Streamlit UI) |
-| `BACKEND_URL` | `http://localhost:8000` | Backend URL for Streamlit UI |
+| `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated list of allowed origins |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | API base URL used by the Next.js frontend |
 | `REDIS_URL` | `redis://localhost:6379` | Redis Stack connection URL |
 | `SEMANTIC_CACHE_THRESHOLD` | `0.97` | Cosine similarity threshold for cache hit (0–1) |
 | `CACHE_TTL_SECONDS` | `86400` | Cache TTL in seconds (default: 24 h) |
@@ -225,15 +232,20 @@ See [eval/EVALUATION_GUIDE.md](eval/EVALUATION_GUIDE.md) for dataset format and 
 
 ```
 documind/
-├── app/          # FastAPI routes and storage helpers
+├── app/                  # FastAPI routes and storage helpers
 ├── rag/
-│   ├── agents/   # LangGraph nodes: router, grader, generator, hallucination, rewriter
-│   ├── chains/   # Retrieval (hybrid + HyDE), reranking, generation chains
-│   ├── cache.py  # Redis semantic cache
-│   └── ingest.py # PDF parsing — text, tables, figures
-├── ui/           # Streamlit app and components
-├── eval/         # RAGAS runner and golden dataset
-└── tests/
+│   ├── agents/           # LangGraph nodes: router, grader, generator, hallucination, rewriter
+│   ├── chains/           # Retrieval (hybrid + HyDE), reranking, generation chains
+│   ├── cache.py          # Redis semantic cache
+│   └── ingest.py         # PDF parsing — text, tables, figures
+├── web/                  # Next.js 16 frontend (App Router, shadcn/ui)
+│   ├── app/              # Pages: /, /chat, /docs, /login
+│   ├── components/       # Shared components and shadcn/ui primitives
+│   ├── lib/              # Typed API client (api.ts) and utilities
+│   └── __tests__/        # Jest + Testing Library tests
+├── legacy/streamlit/     # Previous Streamlit UI (kept for reference)
+├── eval/                 # RAGAS runner and golden dataset
+└── tests/                # Python backend tests
 ```
 
 ---
@@ -241,7 +253,11 @@ documind/
 ## Tests
 
 ```bash
+# Backend
 make test
+
+# Frontend
+cd web && npm test
 ```
 
 ```bash

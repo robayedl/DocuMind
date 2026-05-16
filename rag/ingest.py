@@ -5,7 +5,7 @@ import os
 import re
 import unicodedata
 from pathlib import Path
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
@@ -258,19 +258,26 @@ def _build_docs_from_elements(
     return all_docs
 
 
-def index_document(doc_id: str) -> Tuple[int, str]:
+def index_document(
+    doc_id: str,
+    progress: Callable[[str], None] | None = None,
+) -> Tuple[int, str]:
+    def emit(msg: str) -> None:
+        if progress:
+            progress(msg)
+
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path.exists():
         raise FileNotFoundError(str(pdf_path))
 
-    # Purge any previous chunks so stale vectors from prior indexing runs
-    # don't pollute retrieval when the chunk structure changes.
     clear_document(doc_id)
 
     source_name = pdf_path.name
     contextual = _use_contextual_retrieval()
 
+    emit("Parsing PDF with hi_res layout analysis…")
     elements = extract_elements(pdf_path, doc_id)
+    emit(f"Parsed {len(elements)} elements. Building document chunks…")
 
     full_doc_text = (
         "\n\n".join(
@@ -288,6 +295,8 @@ def index_document(doc_id: str) -> Tuple[int, str]:
     if not all_docs:
         return 0, DEFAULT_COLLECTION
 
+    emit(f"Built {len(all_docs)} chunks. Generating embeddings…")
     add_documents(doc_id, all_docs)
+    emit("Building BM25 keyword index…")
     save_bm25(doc_id, all_docs)
     return len(all_docs), DEFAULT_COLLECTION

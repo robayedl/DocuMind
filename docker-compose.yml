@@ -19,33 +19,33 @@ services:
       ENVIRONMENT: docker
       CHROMA_DIR: /app/chroma_db
       STORAGE_DIR: /app/storage
-      CORS_ORIGINS: http://localhost:8501
+      CORS_ORIGINS: http://localhost:3000
       REDIS_URL: redis://redis:6379
     volumes:
       - ./storage:/app/storage
       - ./chroma_db:/app/chroma_db
       - ./data:/app/data
+      - hf_cache:/root/.cache/huggingface
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
+      start_period: 120s
 
-  streamlit:
-    build: .
-    command: streamlit run ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports:
-      - "8501:8501"
-    env_file:
-      - .env
-    environment:
-      BACKEND_URL: http://api:8000
-    volumes:
-      - ./storage:/app/storage
-      - ./chroma_db:/app/chroma_db
+      - "3000:3000"
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  hf_cache:

@@ -32,7 +32,7 @@ data/
 *.log
 logs/
 
-# Evaluation output — timestamped runs stay local; latest.json is committed
+# Evaluation output 
 eval/results/[0-9]*.json
 eval/__pycache__/
 
@@ -45,4 +45,12 @@ eval/__pycache__/
 # Test artifacts
 testfile.pdf
 attention.pdf
-ocr.pdf
+
+# Next.js (web/)
+web/.next/
+web/node_modules/
+web/.pnp
+web/.pnp.*
+web/coverage/
+web/out/
+web/build/
