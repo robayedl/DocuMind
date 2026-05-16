@@ -1,21 +1,26 @@
-.PHONY: run ui test lint eval update-readme
+.PHONY: run ui test test-ui test-all lint eval update-readme
 
 run:
 	.venv/bin/uvicorn app.main:app --reload --port 8000
 
 ui:
-	.venv/bin/streamlit run ui/streamlit_app.py --server.port 8501
+	cd web && npm run dev
 
 test:
 	.venv/bin/pytest -q
+
+test-ui:
+	cd web && npm test
+
+test-all:
+	.venv/bin/pytest -q
+	.venv/bin/ruff check .
+	cd web && npm test
 
 lint:
 	.venv/bin/ruff check .
 
 # Run RAGAS evaluation against the golden dataset.
-# Requires: DOC_ID env var (the indexed doc_id for "Attention Is All You Need")
-#           GOOGLE_API_KEY env var
-# Example:  DOC_ID=abc123 make eval
 eval:
 	@if [ -z "$(DOC_ID)" ]; then \
 		echo "ERROR: DOC_ID is not set.  Run: DOC_ID=<your_doc_id> make eval"; \

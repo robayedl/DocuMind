@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Literal
+from typing import Callable, Literal
 
 from langgraph.graph import END, StateGraph
 
@@ -139,20 +139,47 @@ def build_graph():
 # Public entry point
 # ──────────────────────────────────────────────
 
-def run_agent(question: str, doc_id: str, session_id: str = "") -> GraphState:
-    """Compile and invoke the full agentic RAG graph."""
+_NODE_LABELS: dict[str, str] = {
+    "router":             "Routing your question…",
+    "retrieve":           "Searching the document…",
+    "grade_documents":    "Reading relevant sections…",
+    "rewrite_query":      "Refining search query…",
+    "generate":           "Generating answer…",
+    "check_hallucination":"Verifying accuracy…",
+    "direct_response":    "Preparing response…",
+    "fallback":           "Preparing response…",
+}
+
+
+def run_agent(
+    question: str,
+    doc_id: str,
+    session_id: str = "",
+    on_step: Callable[[str], None] | None = None,
+) -> GraphState:
+    """Run the agentic RAG graph, calling on_step(label) as each node completes."""
+
     graph = build_graph()
-    return graph.invoke(
-        {
-            "question": question,
-            "generation": "",
-            "documents": [],
-            "doc_id": doc_id,
-            "retry_count": 0,
-            "route": "",
-            "grounded": False,
-            "error": "",
-            "session_id": session_id,
-            "hyde_triggered": False,
-        }
-    )
+    init: GraphState = {
+        "question": question,
+        "generation": "",
+        "documents": [],
+        "doc_id": doc_id,
+        "retry_count": 0,
+        "route": "",
+        "grounded": False,
+        "error": "",
+        "session_id": session_id,
+        "hyde_triggered": False,
+    }
+
+    if on_step is None:
+        return graph.invoke(init)
+
+    final: GraphState = init
+    for chunk in graph.stream(init, stream_mode="updates"):
+        for node_name in chunk:
+            label = _NODE_LABELS.get(node_name, f"{node_name}…")
+            on_step(label)
+            final = {**final, **chunk[node_name]}
+    return final

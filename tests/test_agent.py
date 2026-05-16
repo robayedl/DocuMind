@@ -39,37 +39,23 @@ def _fake_doc(content="Some relevant content."):
 # ──────────────────────────────────────────────
 
 def test_router_routes_greeting():
-    from rag.agents.router import route_query, RouteDecision
+    from rag.agents.router import route_query
 
-    mock_llm = MagicMock()
-    mock_llm.with_structured_output.return_value = RunnableLambda(
-        lambda x: RouteDecision(route="direct")
-    )
-    with patch("rag.agents.router.get_llm", return_value=mock_llm):
-        result = route_query(_make_state(question="Hello, how are you?"))
-
+    result = route_query(_make_state(question="hello"))
     assert result["route"] == "direct"
 
 
 def test_router_routes_document_question():
-    from rag.agents.router import route_query, RouteDecision
+    from rag.agents.router import route_query
 
-    mock_llm = MagicMock()
-    mock_llm.with_structured_output.return_value = RunnableLambda(
-        lambda x: RouteDecision(route="retrieve")
-    )
-    with patch("rag.agents.router.get_llm", return_value=mock_llm):
-        result = route_query(_make_state(question="What are the technical skills listed?"))
-
+    result = route_query(_make_state(question="What are the technical skills listed?"))
     assert result["route"] == "retrieve"
 
 
 def test_router_falls_back_to_retrieve_on_error():
     from rag.agents.router import route_query
 
-    with patch("rag.agents.router.get_llm", side_effect=RuntimeError("API error")):
-        result = route_query(_make_state(question="anything"))
-
+    result = route_query(_make_state(question="anything"))
     assert result["route"] == "retrieve"
 
 

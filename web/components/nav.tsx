@@ -1,0 +1,57 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Brain } from "lucide-react";
+
+const links = [
+  { href: "/",            label: "Home",       external: false },
+  { href: "/docs",        label: "Documents",  external: false },
+  { href: "/chat",        label: "Chat",       external: false },
+  { href: "/how-to-use",  label: "How to Use", external: false },
+  { href: "/about",       label: "About",      external: false },
+  { href: "https://github.com/robayedl/documind", label: "GitHub", external: true },
+];
+
+export default function Nav() {
+  const path = usePathname();
+
+  return (
+    <header className="border-b border-border bg-background/70 backdrop-blur-md sticky top-0 z-50">
+      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight group">
+          <Brain className="size-6 text-primary transition-transform duration-300 group-hover:scale-110" />
+          <span>DocuMind</span>
+        </Link>
+
+        <nav className="flex items-center gap-0.5">
+          {links.map(({ href, label, external }) =>
+            external ? (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              >
+                {label}
+              </a>
+            ) : (
+              <Link
+                key={href}
+                href={href}
+                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                  (href === "/" ? path === "/" : path.startsWith(href))
+                    ? "bg-primary/15 text-primary font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                }`}
+              >
+                {label}
+              </Link>
+            )
+          )}
+        </nav>
+      </div>
+    </header>
+  );
+}

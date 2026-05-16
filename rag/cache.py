@@ -8,7 +8,7 @@ import uuid
 from typing import Optional
 
 import redis as redis_lib
-from redis.commands.search.field import TextField, VectorField
+from redis.commands.search.field import TagField, TextField, VectorField
 from redis.commands.search.index_definition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 
@@ -16,7 +16,8 @@ from rag.llm import get_embeddings
 
 logger = logging.getLogger(__name__)
 
-_INDEX_NAME = "semantic_cache_idx"
+# v2: added doc_id TagField — bump name so existing index is replaced on next start
+_INDEX_NAME = "semantic_cache_v2_idx"
 _KEY_PREFIX = "cache:"
 _VECTOR_DIM = 768
 
@@ -31,6 +32,7 @@ def _ensure_index(client: redis_lib.Redis) -> None:
         client.ft(_INDEX_NAME).info()
     except Exception:
         schema = (
+            TagField("doc_id"),
             VectorField(
                 "embedding",
                 "FLAT",
@@ -53,14 +55,20 @@ def _to_bytes(vec: list[float]) -> bytes:
     return struct.pack(f"{len(vec)}f", *vec)
 
 
-def lookup(query: str) -> Optional[dict]:
+def _escape_tag(value: str) -> str:
+    """Escape special chars in Redis Search tag values (UUIDs contain dashes)."""
+    return value.replace("-", "\\-")
+
+
+def lookup(query: str, doc_id: str) -> Optional[dict]:
     threshold = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.97"))
     try:
         client = _get_client()
         _ensure_index(client)
         vec_bytes = _to_bytes(_embed(query))
+        tag = _escape_tag(doc_id)
         q = (
-            Query("*=>[KNN 1 @embedding $vec AS score]")
+            Query(f"(@doc_id:{{{tag}}})=>[KNN 1 @embedding $vec AS score]")
             .sort_by("score")
             .return_fields("answer", "citations", "score")
             .dialect(2)
@@ -78,14 +86,14 @@ def lookup(query: str) -> Optional[dict]:
                 answer = answer.decode()
             if isinstance(citations_raw, bytes):
                 citations_raw = citations_raw.decode()
-            logger.info("Cache hit (similarity=%.4f) for: %r", similarity, query)
+            logger.info("Cache hit (similarity=%.4f) for %r on doc %s", similarity, query, doc_id)
             return {"answer": answer, "citations": json.loads(citations_raw)}
     except Exception as e:
         logger.warning("Cache lookup failed: %s", e)
     return None
 
 
-def store(query: str, answer: str, citations: list) -> None:
+def store(query: str, doc_id: str, answer: str, citations: list) -> None:
     ttl = int(os.getenv("CACHE_TTL_SECONDS", "86400"))
     try:
         client = _get_client()
@@ -94,6 +102,7 @@ def store(query: str, answer: str, citations: list) -> None:
         client.hset(
             key,
             mapping={
+                "doc_id": doc_id,
                 "embedding": _to_bytes(_embed(query)),
                 "answer": answer,
                 "citations": json.dumps(citations),
