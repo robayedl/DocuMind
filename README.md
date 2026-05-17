@@ -141,8 +141,11 @@ cd documind
 
 ```bash
 # required for PDF parsing
-# macOS: brew install tesseract poppler
-# Linux: apt-get install tesseract-ocr poppler-utils
+# macOS (Homebrew): brew install tesseract poppler
+# macOS (conda):    conda install -c conda-forge tesseract poppler
+# Linux:            apt-get install tesseract-ocr poppler-utils
+# If you use conda, set TESSERACT_CMD=/opt/homebrew/bin/tesseract in .env
+# to ensure the Homebrew build (not the conda one) is used for OCR
 ```
 
 ```bash
@@ -196,6 +199,8 @@ npm run dev   # UI on :3000
 | `HYDE_THRESHOLD` | `0.3` | Reranker score below which HyDE is triggered |
 | `EXTRACT_FIGURES` | `true` | Caption figures with Gemini 2.5 Flash multimodal (max 30/doc) |
 | `CONTEXTUAL_RETRIEVAL` | `true` | Prepend per-chunk context before embedding |
+| `TESSERACT_CMD` | _(system PATH)_ | Full path to the `tesseract` binary — set when the wrong version is picked up (e.g. conda). macOS Homebrew: `/opt/homebrew/bin/tesseract` |
+| `TOKENIZERS_PARALLELISM` | `false` | Set to `false` to suppress HuggingFace tokenizer warnings when uvicorn forks worker processes |
 
 ---
 

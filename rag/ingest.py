@@ -13,6 +13,11 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from unstructured.documents.elements import Image as UnstructuredImage
 from unstructured.documents.elements import Table
 from unstructured.partition.pdf import partition_pdf
+import unstructured_pytesseract
+
+_tesseract_cmd = os.environ.get("TESSERACT_CMD")
+if _tesseract_cmd:
+    unstructured_pytesseract.pytesseract.tesseract_cmd = _tesseract_cmd
 
 from rag.chains.retrieval import save_bm25
 from rag.contextualize import contextualize_chunk
